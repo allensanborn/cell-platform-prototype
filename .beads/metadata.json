@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "cell_platform_prototype",
+  "project_id": "b8e02bdd-dd6c-40f9-aa99-eeee86209a64"
+}
