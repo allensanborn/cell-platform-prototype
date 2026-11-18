@@ -12,3 +12,25 @@ spec:
     - toEntities: [kube-apiserver, cluster]
     - toEndpoints: [{matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns}}]
     - toCIDR: [FLOCI_CIDR_1, FLOCI_CIDR_2]
+---
+# provider-opentofu: same fence, plus the public registry and GitHub release hosts it downloads modules and the AWS
+# provider from. toFQDNs needs the DNS rule so Cilium's DNS proxy learns the IPs; real AWS endpoints stay blocked.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata: {name: opentofu-provider-floci-only, namespace: crossplane-system}
+spec:
+  endpointSelector:
+    matchLabels: {pkg.crossplane.io/provider: provider-opentofu}
+  egress:
+    - toEntities: [kube-apiserver, cluster]
+    - toEndpoints: [{matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns}}]
+      toPorts: [{ports: [{port: "53", protocol: ANY}], rules: {dns: [{matchPattern: "*"}]}}]
+    - toCIDR: [FLOCI_CIDR_1]
+    - toFQDNs:
+        - matchName: registry.opentofu.org
+        - matchName: registry.terraform.io
+        - matchName: github.com
+        - matchName: api.github.com
+        - matchName: codeload.github.com
+        - matchPattern: "*.githubusercontent.com"
+      toPorts: [{ports: [{port: "443", protocol: TCP}]}]

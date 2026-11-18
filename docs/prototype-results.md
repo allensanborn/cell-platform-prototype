@@ -187,7 +187,7 @@ The setup was a dedicated floci 2.5.0 (`xp-floci`, port 4590, Docker resource na
 
 One Composition serves every team, because a namespaced MR resolves the ProviderConfig in its own namespace. A `Database orders` in each team namespace produced one Postgres instance in each team account and none in the default account. floci ran each as a real Postgres container.
 
-**Terraform modules through provider-opentofu v1.1.10.** Both are public, Apache-2.0 modules from the public registry. Both rows below were run on 2026-11-18 (kind, Crossplane 2.4.2, floci 2.5.0):
+**Terraform modules through provider-opentofu v1.1.10.** Both are public, Apache-2.0 modules from the public registry. Both rows below were run on 2026-11-18 (kind, Cilium 1.20.4, Crossplane 2.4.2, floci 2.5.0), with the provider pod behind the egress fence. It resolved only `registry.opentofu.org`, `github.com` and `release-assets.githubusercontent.com`, and no non-ICMP traffic was dropped:
 
 - `cloudposse/dynamodb/aws` 0.37.0.
 - `terraform-aws-modules/rds/aws` 6.13.1.
@@ -205,6 +205,8 @@ Gotchas, in the order they bit:
 
 - **Readiness with go-templating.** XRs stayed `Ready=False` ("Unready resources: db") while every composed resource was ready. function-go-templating doesn't derive readiness: add a `function-auto-ready` step (v0.6.0 here). Composed kinds with no Ready condition, such as a CiliumClusterwideNetworkPolicy, also need `gotemplating.fn.crossplane.io/ready: "True"`. With both, XCells and Databases went Ready. Revisions created before the fix (XCell `q`, pinned) stay not-ready.
 - **Argo CD reported the hub XCell Healthy while its XR was `Ready=False`.** Argo has no built-in health check for a custom XR kind, so it needs a `resource.customizations` health check (not added here).
+- **The Cloud Posse DynamoDB module calls KMS.** Without a `kms` entry in the OpenTofu ProviderConfig's `endpoints`, that call goes to `kms.us-east-1.amazonaws.com`. Unfenced runs still succeeded, so the leak was silent. Behind the fence, `tofu apply` hung on it until `kms` was pointed at floci.
+- **A provider restart mid-apply leaves a state lock.** The `kubernetes` backend's Lease (`lock-tfstate-<workspace>-<suffix>` in `crossplane-system`) stays held by the dead pod, and every later run fails with "the state is already locked". Delete the Lease.
 - **Module version constraints follow the bundled OpenTofu.** provider-opentofu v1.1.10 ships OpenTofu 1.10.0, so `terraform-aws-modules/rds` 7.x (`required_version >= 1.11.1`) fails `init` with "Unsupported OpenTofu Core version". 6.13.1 works.
 - **provider-opentofu with no backend fails on the first observe** with "No state file was found!" from `tofu state list`.
 - **`backendFile` is partial backend config.** It is written to `crossplane.remote.tfbackend` and passed to `init -backend-config=`, so it holds `key = value` pairs only, and the module declares an empty `terraform { backend "kubernetes" {} }`. A full `terraform {}` block in `backendFile` fails the same way as no backend.

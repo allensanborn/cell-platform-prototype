@@ -29,6 +29,7 @@ spec:
         rds      = "FLOCI_URL"
         sts      = "FLOCI_URL"
         iam      = "FLOCI_URL"
+        kms      = "FLOCI_URL"
       }
     }
 ---
@@ -57,6 +58,7 @@ spec:
         rds      = "FLOCI_URL"
         sts      = "FLOCI_URL"
         iam      = "FLOCI_URL"
+        kms      = "FLOCI_URL"
       }
     }
 ---
