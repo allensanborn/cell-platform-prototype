@@ -1,0 +1,14 @@
+# Keep the AWS providers off the internet: egress only to the API server, DNS, in-cluster pods and the two floci
+# containers on the kind network. FLOCI_CIDR_1/2 are replaced with each floci container's IP/32 at apply time.
+# Any call a provider tries to make to real AWS then fails to connect instead of leaving the machine.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata: {name: aws-providers-floci-only, namespace: crossplane-system}
+spec:
+  endpointSelector:
+    matchExpressions:
+      - {key: pkg.crossplane.io/provider, operator: In, values: [provider-aws-rds, crossplane-contrib-provider-family-aws]}
+  egress:
+    - toEntities: [kube-apiserver, cluster]
+    - toEndpoints: [{matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns}}]
+    - toCIDR: [FLOCI_CIDR_1, FLOCI_CIDR_2]

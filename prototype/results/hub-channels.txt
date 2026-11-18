@@ -1,0 +1,2 @@
+dev   revisions=[3:stable 1:stable 2:dev ] hub1=rev3 ns-template=h2 argo=Synced/Healthy
+prod  revisions=[1:stable 2:dev 3:stable ] hub1=rev3 ns-template=h2 argo=Synced/Healthy

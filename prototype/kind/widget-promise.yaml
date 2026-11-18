@@ -1,0 +1,41 @@
+# Ordering probe: the resource output (a Gizmo CR) needs the CRD shipped as a Promise dependency.
+apiVersion: platform.kratix.io/v1alpha1
+kind: Promise
+metadata:
+  name: widget
+  labels: {kratix.io/promise-version: v0.1.0}
+spec:
+  destinationSelectors: [{matchLabels: {gitops: argo}}]
+  dependencies:
+    - apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      metadata: {name: gizmos.probe.example.org}
+      spec:
+        group: probe.example.org
+        names: {kind: Gizmo, plural: gizmos}
+        scope: Namespaced
+        versions: [{name: v1, served: true, storage: true, schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}}]
+  api:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata: {name: widgets.platform.example.org}
+    spec:
+      group: platform.example.org
+      names: {kind: Widget, plural: widgets}
+      scope: Namespaced
+      versions: [{name: v1alpha1, served: true, storage: true, schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}}]
+  workflows:
+    resource:
+      configure:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata: {name: render}
+          spec:
+            containers:
+              - name: render
+                image: mikefarah/yq:4.44.3
+                command: ["/bin/sh", "-c"]
+                args:
+                  - |
+                    N=$(yq '.metadata.name' /kratix/input/object.yaml)
+                    printf 'apiVersion: probe.example.org/v1\nkind: Gizmo\nmetadata: {name: %s, namespace: default}\nspec: {from: widget}\n' "$N" > /kratix/output/gizmo.yaml

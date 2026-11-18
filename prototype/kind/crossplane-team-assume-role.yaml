@@ -1,0 +1,51 @@
+# Cross-account shape: tenants' ProviderConfigs hold no team keys. A single platform identity (account
+# 999999999999) assumes "crossplane-provisioner" in each team account, whose trust policy names only the
+# platform account and whose permissions are rds:* only. Tested on floci with IAM enforcement on
+# (FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED=true). iam-b is a negative control: it uses an untrusted key.
+apiVersion: v1
+kind: Namespace
+metadata: {name: iam-a}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: iam-b}
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: platform-identity, namespace: iam-a}
+stringData:
+  creds: |
+    [default]
+    aws_access_key_id = 999999999999
+    aws_secret_access_key = test
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: platform-identity, namespace: iam-b}
+stringData:
+  creds: |
+    [default]
+    aws_access_key_id = 222222222222
+    aws_secret_access_key = test
+---
+apiVersion: aws.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata: {name: aws, namespace: iam-a}
+spec:
+  credentials: {source: Secret, secretRef: {namespace: iam-a, name: platform-identity, key: creds}}
+  assumeRoleChain: [{roleARN: "arn:aws:iam::111111111111:role/crossplane-provisioner"}]
+  endpoint: {url: {type: Static, static: FLOCI_URL}, hostnameImmutable: true, services: [rds, sts, iam]}
+  skip_credentials_validation: true
+  skip_metadata_api_check: true
+  skip_requesting_account_id: true
+---
+apiVersion: aws.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata: {name: aws, namespace: iam-b}
+spec:
+  credentials: {source: Secret, secretRef: {namespace: iam-b, name: platform-identity, key: creds}}
+  assumeRoleChain: [{roleARN: "arn:aws:iam::111111111111:role/crossplane-provisioner"}]
+  endpoint: {url: {type: Static, static: FLOCI_URL}, hostnameImmutable: true, services: [rds, sts, iam]}
+  skip_credentials_validation: true
+  skip_metadata_api_check: true
+  skip_requesting_account_id: true

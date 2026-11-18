@@ -1,0 +1,128 @@
+# Reusing existing Terraform modules from Crossplane via provider-opentofu v1.1.10.
+# Both modules are public (Apache-2.0) and fetched from the public registry:
+#   cloudposse/dynamodb/aws 0.37.0
+#   terraform-aws-modules/rds/aws 6.13.1 (7.x needs OpenTofu >= 1.11.1; provider-opentofu v1.1.10 bundles 1.10.0)
+# Each team namespace gets an OpenTofu ProviderConfig whose AWS provider uses that team's floci account key.
+# FLOCI_URL is replaced at apply time.
+apiVersion: opentofu.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata: {name: tofu, namespace: team-a}
+spec:
+  # backendFile is passed to `tofu init -backend-config=`, so it holds key = value pairs only;
+  # the module itself declares the empty backend block.
+  backendFile: |
+    secret_suffix     = "team-a"
+    namespace         = "crossplane-system"
+    in_cluster_config = true
+  credentials:
+    - {filename: aws-creds.ini, source: Secret, secretRef: {namespace: team-a, name: aws-account, key: creds}}
+  configuration: |
+    provider "aws" {
+      region                      = "us-east-1"
+      shared_credentials_files    = ["${path.module}/aws-creds.ini"]
+      skip_credentials_validation = true
+      skip_metadata_api_check     = true
+      skip_requesting_account_id  = true
+      endpoints {
+        dynamodb = "FLOCI_URL"
+        ec2      = "FLOCI_URL"
+        rds      = "FLOCI_URL"
+        sts      = "FLOCI_URL"
+        iam      = "FLOCI_URL"
+      }
+    }
+---
+apiVersion: opentofu.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata: {name: tofu, namespace: team-b}
+spec:
+  # backendFile is passed to `tofu init -backend-config=`, so it holds key = value pairs only;
+  # the module itself declares the empty backend block.
+  backendFile: |
+    secret_suffix     = "team-b"
+    namespace         = "crossplane-system"
+    in_cluster_config = true
+  credentials:
+    - {filename: aws-creds.ini, source: Secret, secretRef: {namespace: team-b, name: aws-account, key: creds}}
+  configuration: |
+    provider "aws" {
+      region                      = "us-east-1"
+      shared_credentials_files    = ["${path.module}/aws-creds.ini"]
+      skip_credentials_validation = true
+      skip_metadata_api_check     = true
+      skip_requesting_account_id  = true
+      endpoints {
+        dynamodb = "FLOCI_URL"
+        ec2      = "FLOCI_URL"
+        rds      = "FLOCI_URL"
+        sts      = "FLOCI_URL"
+        iam      = "FLOCI_URL"
+      }
+    }
+---
+# team-a: Cloud Posse DynamoDB module
+apiVersion: opentofu.m.upbound.io/v1beta1
+kind: Workspace
+metadata: {name: sessions-table, namespace: team-a}
+spec:
+  providerConfigRef: {kind: ProviderConfig, name: tofu}
+  forProvider:
+    source: Inline
+    module: |
+      terraform {
+        backend "kubernetes" {}
+      }
+      module "table" {
+        source            = "cloudposse/dynamodb/aws"
+        version           = "0.37.0"
+        name              = "sessions"
+        hash_key          = "id"
+        billing_mode      = "PAY_PER_REQUEST"
+        enable_autoscaler = false
+      }
+      output "table_name" { value = module.table.table_name }
+---
+# team-b: terraform-aws-modules RDS module, with the VPC and subnets it requires
+apiVersion: opentofu.m.upbound.io/v1beta1
+kind: Workspace
+metadata: {name: billing-db, namespace: team-b}
+spec:
+  providerConfigRef: {kind: ProviderConfig, name: tofu}
+  forProvider:
+    source: Inline
+    module: |
+      terraform {
+        backend "kubernetes" {}
+      }
+      resource "aws_vpc" "this" { cidr_block = "10.20.0.0/16" }
+      resource "aws_subnet" "a" {
+        vpc_id            = aws_vpc.this.id
+        cidr_block        = "10.20.1.0/24"
+        availability_zone = "us-east-1a"
+      }
+      resource "aws_subnet" "b" {
+        vpc_id            = aws_vpc.this.id
+        cidr_block        = "10.20.2.0/24"
+        availability_zone = "us-east-1b"
+      }
+      module "db" {
+        source                      = "terraform-aws-modules/rds/aws"
+        version                     = "6.13.1"
+        identifier                  = "billing"
+        engine                      = "postgres"
+        engine_version              = "16"
+        family                      = "postgres16"
+        major_engine_version        = "16"
+        instance_class              = "db.t3.micro"
+        allocated_storage           = 30
+        db_name                     = "billing"
+        username                    = "billingadmin"
+        manage_master_user_password = false
+        password                    = "proto-not-a-real-password-1"
+        port                        = 5432
+        create_db_subnet_group      = true
+        subnet_ids                  = [aws_subnet.a.id, aws_subnet.b.id]
+        skip_final_snapshot         = true
+        deletion_protection         = false
+      }
+      output "db_endpoint" { value = module.db.db_instance_endpoint }

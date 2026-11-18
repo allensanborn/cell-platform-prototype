@@ -1,0 +1,3 @@
+# Release-propagation captures (2026-11-16)
+
+Verbatim doc pages and code excerpts, fetched 2026-11-16 by a research agent via `git clone --depth 1` at release tags: OpenChoreo v1.3.3 (openchoreo/openchoreo@5336791f, docs v1.3.x) and Radius v0.62.0 (radius-project/radius@37a8cbd3, radius-project/docs), plus two Kubernetes aggregation-layer docs. Each file carries `resource`, `fetched` and `fetch_note`. Prefixes: `oc-` OpenChoreo code, `ocdocs-` OpenChoreo docs, `rad-` Radius code, `raddocs-` Radius docs, `k8s-` Kubernetes docs. Summarised in `docs/sources/release-propagation-openchoreo-radius-2026-11.md`.

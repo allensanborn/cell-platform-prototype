@@ -1,0 +1,7 @@
+apiVersion: platform.example.org/v1alpha1
+kind: XCell
+metadata:
+  name: hub1
+  annotations: {argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true}
+spec:
+  crossplane: {compositionRef: {name: xcell-np}}

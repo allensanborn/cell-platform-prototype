@@ -1,0 +1,8 @@
+CASE                                         EXPECT     GOT
+b -> a svc (allowed caller, declared dep)    200        200
+c -> a svc (declared dep, not in allowFrom)  403        403
+b -> c svc (not a declared dep)              conn-fail  403
+a -> a svc (same cell)                       200        200
+rogue -> a svc (out of mesh)                 deny       200
+rogue -> a pod IP (bypass waypoint)          deny       200
+b -> a pod IP (bypass waypoint, in mesh)     deny       200

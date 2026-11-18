@@ -1,0 +1,70 @@
+# Crossplane v2 twin of the Cell Promise: cluster-scoped XCell -> Namespace + CiliumClusterwideNetworkPolicy east fence.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-compose-cells
+  labels: {rbac.crossplane.io/aggregate-to-crossplane: "true"}
+rules:
+  - {apiGroups: [""], resources: [namespaces], verbs: ["*"]}
+  - {apiGroups: [cilium.io], resources: [ciliumclusterwidenetworkpolicies], verbs: ["*"]}
+---
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata: {name: xcells.platform.example.org}
+spec:
+  scope: Cluster
+  group: platform.example.org
+  names: {kind: XCell, plural: xcells}
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                dependsOn: {type: array, items: {type: string}}
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xcell
+  labels: {channel: stable}
+spec:
+  compositeTypeRef: {apiVersion: platform.example.org/v1alpha1, kind: XCell}
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $n := .observed.composite.resource.metadata.name }}
+            ---
+            apiVersion: v1
+            kind: Namespace
+            metadata:
+              name: xcell-{{ $n }}
+              labels: {platform.example.org/cell-template: r3}
+              annotations: {gotemplating.fn.crossplane.io/composition-resource-name: ns}
+            ---
+            apiVersion: cilium.io/v2
+            kind: CiliumClusterwideNetworkPolicy
+            metadata:
+              name: east-xcell-{{ $n }}
+              annotations: {gotemplating.fn.crossplane.io/composition-resource-name: east}
+            spec:
+              endpointSelector: {matchLabels: {k8s:io.kubernetes.pod.namespace: xcell-{{ $n }}}}
+              egress:
+                - toEndpoints:
+                    - matchLabels: {k8s:io.kubernetes.pod.namespace: xcell-{{ $n }}}
+                    - matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns}
+                    {{- range (.observed.composite.resource.spec.dependsOn | default list) }}
+                    - matchLabels: {k8s:io.kubernetes.pod.namespace: xcell-{{ . }}}
+                    {{- end }}

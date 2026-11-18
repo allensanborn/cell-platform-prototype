@@ -1,0 +1,22 @@
+# Workaround: point the provider's own STS client (used for assumeRoleChain) at floci.
+# FLOCI_IAM_URL is replaced at apply time. Keep provider-egress-fence.yaml applied as a backstop.
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata: {name: aws-sts-to-floci}
+spec:
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+            - name: package-runtime
+              env:
+                - {name: AWS_ENDPOINT_URL_STS, value: FLOCI_IAM_URL}
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata: {name: provider-aws-rds}
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/provider-aws-rds:v2.8.1
+  runtimeConfigRef: {name: aws-sts-to-floci}

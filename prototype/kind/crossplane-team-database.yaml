@@ -1,0 +1,106 @@
+# Per-team-account Database: each team namespace holds a platform-owned ProviderConfig "aws" whose
+# credentials are that team's account (floci: a 12-digit access key id = an isolated account).
+# One namespaced XDatabase XRD + one Composition serve every team; the MR resolves "aws" in its own namespace.
+# FLOCI_URL is replaced at apply time with the floci container's address on the kind network.
+apiVersion: v1
+kind: Namespace
+metadata: {name: team-a}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: team-b}
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: aws-account, namespace: team-a}
+stringData:
+  creds: |
+    [default]
+    aws_access_key_id = 111111111111
+    aws_secret_access_key = test
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: aws-account, namespace: team-b}
+stringData:
+  creds: |
+    [default]
+    aws_access_key_id = 222222222222
+    aws_secret_access_key = test
+---
+apiVersion: aws.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata: {name: aws, namespace: team-a}
+spec:
+  credentials: {source: Secret, secretRef: {namespace: team-a, name: aws-account, key: creds}}
+  endpoint: {url: {type: Static, static: FLOCI_URL}, hostnameImmutable: true, services: [rds]}
+  skip_credentials_validation: true
+  skip_metadata_api_check: true
+  skip_requesting_account_id: true
+---
+apiVersion: aws.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata: {name: aws, namespace: team-b}
+spec:
+  credentials: {source: Secret, secretRef: {namespace: team-b, name: aws-account, key: creds}}
+  endpoint: {url: {type: Static, static: FLOCI_URL}, hostnameImmutable: true, services: [rds]}
+  skip_credentials_validation: true
+  skip_metadata_api_check: true
+  skip_requesting_account_id: true
+---
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata: {name: databases.platform.example.org}
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names: {kind: Database, plural: databases}
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                size: {type: string, enum: [small, medium], default: small}
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata: {name: database-postgres}
+spec:
+  compositeTypeRef: {apiVersion: platform.example.org/v1alpha1, kind: Database}
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $xr := .observed.composite.resource }}
+            ---
+            apiVersion: rds.aws.m.upbound.io/v1beta1
+            kind: Instance
+            metadata:
+              name: {{ $xr.metadata.name }}
+              annotations: {gotemplating.fn.crossplane.io/composition-resource-name: db}
+            spec:
+              providerConfigRef: {kind: ProviderConfig, name: aws}
+              forProvider:
+                region: us-east-1
+                engine: postgres
+                engineVersion: "16"
+                instanceClass: {{ if eq $xr.spec.size "medium" }}db.t3.medium{{ else }}db.t3.micro{{ end }}
+                allocatedStorage: 20
+                username: appadmin
+                autoGeneratePassword: true
+                passwordSecretRef: {name: {{ $xr.metadata.name }}-master, key: password}
+                skipFinalSnapshot: true
+    - step: auto-ready
+      functionRef: {name: function-auto-ready}

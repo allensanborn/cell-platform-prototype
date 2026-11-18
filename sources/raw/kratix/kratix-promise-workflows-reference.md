@@ -1,0 +1,328 @@
+---
+type: "source"
+title: "Kratix: Promise Workflows (reference)"
+resource: "https://docs.kratix.io/main/reference/promises/workflows"
+source_kind: "webpage"
+tags: ["kratix"]
+timestamp: "2026-10-21T00:00:00Z"
+fetch_note: "obscura fetch --stealth --dump text (WebFetch only returned a summary). Plain-text dump: markup lost, so YAML/code blocks are flattened to unindented lines and the architecture diagram is a run-together label string; indentation-dependent examples are not reliable here. Docs \"main\" branch, fetched 2026-10-21."
+---
+
+# Kratix: Promise Workflows (reference)
+
+
+Skip to main content
+
+On this page
+
+A Kratix Promise may contain workflow definitions for hooking into the Promise lifecycle.
+
+Kratix supports two Promise workflow types: configure and delete.
+
+The configure workflow runs when the Promise is created, updated, or reconciled.
+
+The delete workflow runs when the Promise is deleted.
+
+Kratix workflows are made up of one or more Pipelines.
+
+The configure workflow may contain multiple Pipelines, which are executed serially.
+
+The delete workflow can only contain a single Pipeline.
+
+Refer to the Workflows documentation for details on how to
+write Kratix Pipelines.
+
+To define Promise workflows inside a Promise, use spec.workflows.promise in the Promise
+definition as shown below.
+
+platform: platform.kratix.io/v1alpha1
+
+kind: Promise
+
+metadata:
+
+...
+
+spec:
+
+...
+
+workflows:
+
+promise:
+
+configure:
+
+- # Pipeline definitions (multiple)
+
+delete:
+
+- # Pipeline definition (single)
+
+Configure Workflows​
+
+The configure workflow runs when the Promise is created, updated, or reconciled.
+
+info
+
+You can determine whether a workflow is a create or an update by checking the observedGeneration in the Promise status. If it is an update, the observedGeneration will be greater than 1.
+
+Multiple Pipelines​
+
+Promise Configure workflows allow for multiple Pipelines to be executed in sequence.
+
+This enables step-by-step configuration of declarative state, as each Pipeline ends by
+writing its output to the Kratix State Store. This means each Pipeline can depend upon
+state declared during the previous Pipelines.
+
+Within each Pipeline, an array of containers are defined, which will also execute in
+sequence.
+
+info
+
+For simple cases, a single Pipeline with one or many containers will suffice.
+
+The example below shows how a promise.configure workflow can be defined:
+
+platform: platform.kratix.io/v1alpha1
+
+kind: Promise
+
+metadata:
+
+...
+
+spec:
+
+...
+
+workflows:
+
+promise:
+
+configure:
+
+- apiVersion: platform.kratix.io/v1alpha1
+
+kind: Pipeline
+
+metadata:
+
+name: pipeline-a # Executes first
+
+spec:
+
+containers:
+
+...
+
+- apiVersion: platform.kratix.io/v1alpha1
+
+kind: Pipeline
+
+metadata:
+
+name: pipeline-b # Follows pipeline-a
+
+spec:
+
+containers:
+
+...
+
+In this example, pipeline-a will run first, followed by pipeline-b.
+
+Pipeline Failures​
+
+A Pipeline fails if any of its containers return a non-zero exit code.
+
+If this occurs, the workflow halts: no further containers are executed within the
+Pipeline, and no further Pipelines are executed in that run.
+
+By default, Kratix reruns the Configure workflow from the beginning when the reconciliation interval is reached. If workflows.reconcileAfterFailure is true, the workflow will be retried after the reconciliation interval. To rerun it sooner, trigger a manual reconciliation.
+
+Suspending or Retrying a workflow​
+
+A Promise Configure Pipeline can output an optional file to control the workflow execution:
+
+/kratix/metadata/workflow-control.yaml
+
+The file supports the following schema:
+
+retryAfter: <duration> # e.g. 10m, 1h, 1d
+
+suspend: true | false
+
+message: "optional reason"
+
+When suspend is set to true, Kratix:
+
+adds kratix.io/workflow-suspended: "true" to the Promise
+
+marks the current pipeline as Suspended in status.kratix.workflows.pipelines
+
+stores the optional message on that pipeline entry
+
+stops executing later Pipelines in the workflow
+
+If the suspend label is removed, Kratix starts from the suspended Pipeline.
+
+When a Pipeline writes retryAfter, Kratix will treat the current pipeline as suspended. It will also:
+
+re-executes the suspended Pipeline after the duration set by retryAfter
+
+increments the retry attempts for that pipeline in status.kratix.workflows.pipelines
+
+If the re-executed Pipeline writes a new retryAfter, Kratix schedules another
+retry from that Pipeline. If the re-executed Pipeline does not write retryAfter, the retry loop stops and Kratix continues with the next Pipeline
+in the workflow.
+
+If both retryAfter and suspend are present, the value of suspend is
+ignored and the pipeline will be re-executed after the duration set by retryAfter.
+
+If a new reconciliation is triggered (for example due to a manual reconciliation
+or a promise update) while the Promise is suspended, Kratix starts the configure
+workflow from the beginning.
+
+note
+
+The message field is used to populate the status.kratix.workflows.pipelines.message field. This field is displayed when the kubectl describe is evoked, but not when the kubectl get is used.
+
+To display the message when using kubectl get, make sure to output the status
+file to the /kratix/metadata/status.yaml file.
+
+Idempotency​
+
+All commands which run in Configure workflows must be idempotent, as there is a guarantee
+that they will be run multiple times a day, and may be run much more frequently depending
+on other environmental impacts (e.g. Pod restarts).
+
+The promise.configure workflow is regularly executed. Kubernetes reconciles on a number
+different actions, including, but not limited to:
+
+Promise creation
+
+Kratix Controller restarts
+
+Changes to the Promise definition
+
+In addition to the above, the Kratix Promise Controller will reconcile on a regular cadence -
+the Default Reconciliation Interval - which is 10 hours by default and
+configurable via the kratix config. The regular
+reconciliation attempts to mitigate against any drift that may have occurred. During this
+reconciliation, the controller will ensure that all the Workflows for a given promise are re-run.
+
+note
+
+This reconciliation will not ensure that unchanged documents are re-written to the
+state store. The reconciliation between workflow outputs and the state store is
+currently only triggered on change. For example, if a file has been deleted from your
+GitStateStore, but the outputs from your workflow have not changed, this will
+not be rewritten. This will be delivered in issue #254 if you would like to
+follow along progress or share your requirements.
+
+As this reconciliation is managed by the Promise Controller, restarts of the Kratix Controller
+Manager may disrupt the regularity of this cadence meaning that the reconciliation interval
+may be greater than the configured.
+
+Pipeline Reconciliation​
+
+If a new reconciliation is triggered while a Pipeline is actively running (for
+example due to a Promise update), Kratix waits for the current Job to reach a
+terminal state before restarting the configure workflow from the beginning.
+
+Delete Workflows​
+
+Promise Delete workflows are triggered when a Promise is deleted, and currently only
+support a single Pipeline.
+
+If a Promise configure Pipeline is still running when the Promise is deleted, Kratix
+waits for the current Job to reach a terminal state before triggering the delete
+workflow.
+
+This Pipeline is responsible for cleaning up resources and configurations that were set up
+by the promise.configure workflow.
+
+Suspending or Retrying a Delete workflow​
+
+Like the Configure workflow, a Delete Pipeline can write /kratix/metadata/workflow-control.yaml to suspend or retry itself before it finishes.
+
+While a Delete Pipeline is suspended, Kratix does not delete the Works created by the
+Promise, and the DeleteWorkflowCompleted condition is set to False with reason DeleteWorkflowSuspended. This lets a Delete Pipeline gate teardown of the Promise's
+Works based on an external condition. Removing the kratix.io/workflow-suspended label
+re-runs the Delete Pipeline; if it completes without suspending again, the Works are
+deleted and the Promise deletion completes.
+
+When Delete Pipeline is suspended, it can also write its own /kratix/metadata/status.yaml, the same way a Configure Pipeline does. Writing a message key there surfaces that message via kubectl get, rather than only via kubectl describe. See the status documentation for more detail.
+
+The example below shows how a promise.delete workflow can be defined.
+
+platform: platform.kratix.io/v1alpha1
+
+kind: Promise
+
+metadata:
+
+...
+
+spec:
+
+...
+
+workflows:
+
+promise:
+
+delete:
+
+- apiVersion: platform.kratix.io/v1alpha1
+
+kind: Pipeline
+
+metadata:
+
+name: delete-pipeline # Single pipeline
+
+spec:
+
+containers:
+
+...
+
+Pipeline Failures​
+
+Kratix will create a single Delete Pipeline Job when deletion is initiated. If a failure occurs
+within a pod created by the Job, new pods for the Job will continue to be created until the backoffLimit for the Job has been reached and the Job fails. Kratix will not attempt to
+create any additional Delete Pipeline Jobs after this point and the Promise deletion will not complete without
+further intervention.
+
+Kratix will create a new Pipeline Job when:
+
+The Promise is updated
+
+A Manual Reconciliation is triggered
+
+This means that if the failing Pipeline Job can be fixed by applying an update to the Promise,
+this change can be applied to the Promise and a Delete Job reflecting this change will run.
+
+If a command intermittently fails during container execution, this should be handled within
+the container itself (including any retry attempts). This reduces the risk of such
+commands causing the delete pipeline Pod, and eventually the Job as whole, to fail.
+
+Configure Workflows
+
+Multiple Pipelines
+
+Pipeline Failures
+
+Suspending or Retrying a workflow
+
+Idempotency
+
+Pipeline Reconciliation
+
+Delete Workflows
+
+Suspending or Retrying a Delete workflow
+
+Pipeline Failures

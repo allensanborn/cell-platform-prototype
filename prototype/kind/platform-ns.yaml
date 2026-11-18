@@ -1,0 +1,58 @@
+# Platform-owned north and south doors plus the south fence.
+apiVersion: v1
+kind: Namespace
+metadata: {name: platform-ingress}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: north, namespace: platform-ingress}
+spec:
+  gatewayClassName: istio
+  allowedListeners:
+    namespaces:
+      from: Selector
+      selector: {matchExpressions: [{key: cell, operator: Exists}]}
+  listeners:
+    - {name: platform, port: 80, protocol: HTTP, hostname: platform.example.test, allowedRoutes: {namespaces: {from: Same}}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-egress
+  labels: {istio.io/dataplane-mode: ambient, istio.io/use-waypoint: waypoint}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: waypoint, namespace: istio-egress, labels: {istio.io/waypoint-for: service}}
+spec:
+  gatewayClassName: istio-waypoint
+  listeners: [{name: mesh, port: 15008, protocol: HBONE}]
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata: {name: httpbin-org, namespace: istio-egress}
+spec:
+  hosts: [httpbin.org]
+  ports: [{number: 80, name: http, protocol: HTTP}]
+  resolution: DNS
+---
+# south door: only cell-b may use httpbin.org
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: httpbin-org, namespace: istio-egress}
+spec:
+  targetRefs: [{kind: ServiceEntry, group: networking.istio.io, name: httpbin-org}]
+  action: ALLOW
+  rules: [{from: [{source: {namespaces: [cell-b]}}]}]
+---
+# south fence: cells cannot reach the internet directly, whatever their own policies say
+apiVersion: policy.networking.k8s.io/v1alpha2
+kind: ClusterNetworkPolicy
+metadata: {name: platform-deny-world-egress}
+spec:
+  tier: Admin
+  priority: 20
+  subject:
+    namespaces: {matchExpressions: [{key: cell, operator: Exists}]}
+  egress:
+    - {name: deny-world, action: Deny, to: [{networks: [0.0.0.0/0]}]}

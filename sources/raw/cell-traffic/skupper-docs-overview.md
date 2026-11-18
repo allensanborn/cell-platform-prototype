@@ -1,0 +1,64 @@
+---
+resource: https://github.com/skupperproject/skupper-docs/blob/5d7a092b0617f4ec8da69f634c3a0ed4af15d78f/input/overview/index.md
+fetched: 2026-11-16
+fetch_note: "git clone --depth 1 skupperproject/skupper-docs@5d7a092b0617f4ec8da69f634c3a0ed4af15d78f (2026-11-10)"
+---
+
+
+<!-- skupper-docs/input/overview/index.md lines 1,55 -->
+
+---
+navtitle: Skupper overview
+---
+<a id="skupper-overview"></a>
+# What is {{skupper_name}}?
+<!--ASSEMBLY-->
+
+{{skupper_name}} connects distributed applications across sites by creating an application network.
+
+Hybrid clouds enable organizations to combine on-premises, private cloud, and public cloud resources.
+While such a solution provides many benefits, it also presents a unique challenge: enabling these resources to communicate with each other.
+
+{{skupper_name}} provides a solution to this challenge with an Application Network that simply and securely connects applications running in different network locations.
+
+<a id="application-networks"></a>
+## Application networks
+<!--CONCEPT-->
+
+An application network connects services across sites as if they were running together.
+
+{{skupper_name}} solves multi-cluster communication challenges through something called a Virtual Application Network or just application network.
+To understand the value of {{skupper_name}}, it is helpful to first understand what an application network is.
+
+An application network connects the applications and services in your hybrid cloud into a virtual network.
+They can communicate with each other as if they were all running in the same site.
+In this diagram, an application network connects three services, each of which is running in a different cloud:
+
+![Three application sites in different clouds, each with a service and a Layer 7 router, connected by an application network](../images/overview-clouds.png)
+
+In essence, the application network connects the services in a distributed application with a microservice architecture.
+
+![A distributed application composed of three services: Service A, Service B, and Service C](../images/overview-application.png)
+
+Application networks are able to provide connectivity across the hybrid cloud by using {{skupper_name}} routers.
+
+<a id="skupper-routers"></a>
+## {{skupper_name}} routers
+<!--CONCEPT-->
+
+{{skupper_name}} routers carry application traffic between services in different sites.
+
+{{skupper_name}} routers form the backbone of an application network in the same way that conventional network routers form the backbone of a VPN.
+However, instead of routing IP packets between network endpoints, {{skupper_name}} routers route messages between application endpoints.
+
+**Application services**
+
+An application service represents an endpoint, or destination in the application network.
+When an application sends a communication to an service, the {{skupper_name}} routers distribute the communication to any other application in the application network that has the same service.
+
+For example, in this diagram, **Service B** sends a message with an application service to its local application router.
+**Service A** and **Service C** are subscribed to the same service.
+The application router routes copies of the message through the application network until they arrive at each destination.
+
+![Service B sending a message through skupper-routers to Service A and Service C via application routing](../images/overview-routers.png)
+

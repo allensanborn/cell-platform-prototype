@@ -1,0 +1,226 @@
+---
+type: source
+resource: https://docs.kratix.io/main/guides/installing-fluxcd
+title: "Flux (GitOps agent for Kratix)"
+source_kind: webpage
+tags: [kratix, gitops, flux, destinations, state-store]
+timestamp: 2026-11-13T00:00:00Z
+fetch_note: "gh api repos/syntasso/kratix-docs/contents/docs/main/04-guides/02-installing-gitops-agent/01-flux.mdx -H Accept: application/vnd.github.raw (2026-11-13), main@169418223c15b2fc231f80890db7842e5e77e550; raw MDX/markdown source byte-for-byte, Docusaurus components not rendered; resource URL is the docs.kratix.io slug for this file."
+---
+
+---
+description: Install Flux
+slug: /main/guides/installing-fluxcd
+title: Flux
+---
+```mdx-code-block
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+```
+
+Flux can be used as the GitOps agent for Kratix. This guide will show you how to
+install Flux to sync Kubernetes resources from your state store to your cluster.
+
+## Installing Flux
+
+If you have already installed Flux you can skip this section.
+
+For the most up to date information on installing Flux, see the [Flux
+documentation](https://fluxcd.io/docs/installation/). The simplest method of
+installation is to use the latest FluxCD release manifest from the Flux repo on
+GitHub:
+
+```bash
+kubectl --context $WORKER apply -f https://github.com/fluxcd/flux2/releases/latest/download/install.yaml
+```
+
+If you wish to install a different way (e.g. Helm or CLI), or want to install a specific version,
+follow the instructions in the [Flux documentation](https://fluxcd.io/docs/installation/).
+
+Make sure that `flux` is ready before proceeding:
+
+```shell-session
+$ kubectl --context $WORKER get pods --namespace flux-system
+NAME                                       READY   STATUS    RESTARTS   AGE
+helm-controller-5f7457c9dd-s5qzt           1/1     Running   0          18s
+kustomize-controller-5f58d55f76-hwm5w      1/1     Running   0          19s
+notification-controller-685bdc466d-5xmk8   1/1     Running   0          16s
+source-controller-86b8b57796-t6xgg         1/1     Running   0          20s
+```
+
+## Configuring Flux
+### Configuring access to the State Store
+In order for FluxCD to be able to sync resources to your cluster you need to provide
+FluxCD access to read from your state store. This can be done by creating a `Bucket` or `GitRepository`
+resource depending on the type of state store you are using.
+
+<Tabs className="boxedTabs" groupId="stateStore">
+
+  <TabItem value="bucket" label="Bucket (on KinD)">
+
+    Create a `flux-statestore.yaml` for giving Flux access to the SeaweedFS
+    bucket. Below is an example of a `Bucket` configured to talk to a SeaweedFS
+    instance running locally. For more information on the different
+    configuration and authentication options for the `Bucket` resource, see the
+    [FluxCD docs](https://fluxcd.io/flux/components/source/buckets/).
+
+    :::info
+    This example depends on a secret called `bucket-credentials` existing in the
+    `flux-system` namespace. This is only necessary if the repository is private
+    and there are a number of authentication options described in the
+    [FluxCD docs](https://fluxcd.io/flux/components/source/gitrepositories/#secret-reference).
+    :::
+
+    ```yaml
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: Bucket
+    metadata:
+      name: default-name
+      namespace: flux-system
+    spec:
+      interval: 10s
+      provider: generic
+      bucketName: kratix
+      endpoint: 172.18.0.2:31337
+      insecure: true
+      secretRef:
+        name: bucket-credentials
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: bucket-credentials
+      namespace: flux-system
+    type: Opaque
+    stringData:
+      accesskey: <access key>
+      secretkey: <secret key>
+    ```
+  </TabItem>
+
+  <TabItem value="git" label="Git Repository">
+
+    Create a `flux-statestore.yaml` for giving Flux access to the Git
+    Repository. Below is an example of a `GitRepository` configured to talk to
+    GitHub repo. For more information on the different configuration and
+    authentication opitions for the `GitRepository` resource, see the [FluxCD
+    docs](https://fluxcd.io/flux/components/source/gitrepositories/).
+
+    :::info
+    This example depends on a secret called `git-credentials` existing in the
+    `flux-system` namespace. This is only necessary if the repository is private
+    and there are a number of authentication options described in the
+    [FluxCD docs](https://fluxcd.io/flux/components/source/gitrepositories/#secret-reference).
+    :::
+
+    ```yaml
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    metadata:
+      name: default-name
+      namespace: flux-system
+    spec:
+      interval: 10s
+      url: https://github.com/syntasso/worker-destination
+      ref:
+	    branch: main
+      secretRef:
+        name: git-credentials
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: git-credentials
+      namespace: flux-system
+    type: Opaque
+    stringData:
+      identity: |
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        ...
+        -----END OPENSSH PRIVATE KEY-----
+      known_hosts: |
+        github.com ecdsa-sha2-nistp256 AAAA...
+    ```
+  </TabItem>
+
+</Tabs>
+
+Install the `flux-statestore.yaml` resources to the worker cluster:
+
+```bash
+kubectl apply --context $WORKER -f flux-statestore.yaml
+```
+
+### Configuring Flux to deploy resources from the State Store
+
+Now that Flux is configured to read from the state store, you need to configure
+Flux to read the resources from the state store and apply them to the cluster.
+This is done by creating a `Kustomization` resources. Kratix creates two, one
+for the dependencies (documents from the Promise Dependencies or Promise
+Configure Workflow) and one for the resources (documents from the Resource
+Configure Workflow).
+
+Create a `kustomization.yaml` file with the following content, substituting the values
+for the `sourceRef` depending on which type of state store you are using.
+
+The `path` field should point to the directory in the state store where the
+resources/dependencies are getting written to. By default this is the
+`./<destination-name>/resources` and `./<destination-name>/dependencies`
+directories. If you are configuring more advanced setups, you may need to change
+this path, see [Destination documentation](../reference/destinations/intro)
+for more information.
+
+```yaml
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kratix-workload-resources
+  namespace: flux-system
+spec:
+  interval: 3s
+  prune: true
+  dependsOn:
+    - name: kratix-workload-dependencies
+  sourceRef:
+    kind: <Bucket or GitRepository>
+    name: default-name
+  path: ./<path in state store to destination>/resources
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kratix-workload-dependencies
+  namespace: flux-system
+spec:
+  interval: 8s
+  prune: true
+  sourceRef:
+    kind: <Bucket or GitRepository>
+    name: default-name
+  path: ./<path in state store to destination>/dependencies
+```
+
+Once filled in with the correct values, apply the resource to the worker
+cluster:
+
+```bash
+kubectl apply --context $WORKER -f kustomization.yaml
+```
+
+To check that Flux is correctly syncing resources from the state store to the
+cluster you can check the health of the Kustomization resources:
+
+```shell-session
+kubectl --context $WORKER get kustomizations -A -w
+```
+
+You should see the `kratix-workload-resources` and `kratix-workload-dependencies`
+resources eventually get in the `Ready` state.
+```
+NAMESPACE     NAME                           AGE   READY   STATUS
+flux-system   kratix-platform-dependencies   23s   True    Applied revision: sha256:9610eac643b6cadfd7bce31eb26abea051ae02c5f81b52de1d9d2a8458c3e0b8
+flux-system   kratix-platform-resources      23s   True    Applied revision: sha256:9610eac643b6cadfd7bce31eb26abea051ae02c5f81b52de1d9d2a8458c3e0b8
+```

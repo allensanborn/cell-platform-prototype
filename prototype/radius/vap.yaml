@@ -1,0 +1,14 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata: {name: deny-probe-writes}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - {apiGroups: [ucp.dev], apiVersions: ["*"], operations: [CREATE, UPDATE], resources: ["*"]}
+  validations: [{expression: "false", message: "probe: admission saw this write"}]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata: {name: deny-probe-writes}
+spec: {policyName: deny-probe-writes, validationActions: [Deny]}

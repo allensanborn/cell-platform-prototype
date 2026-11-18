@@ -1,0 +1,45 @@
+---
+resource: https://github.com/radius-project/radius/blob/37a8cbd33e990886460f4fd1987d6a4fefd901c5/deploy/Chart/templates/ucp/apiservice.yaml
+fetched: 2026-11-16
+fetch_note: "git clone --depth 1 --branch v0.62.0, radius-project/radius@37a8cbd33e990886460f4fd1987d6a4fefd901c5"
+---
+
+<!-- src/rad/deploy/Chart/templates/ucp/apiservice.yaml lines 1,40 -->
+
+```
+{{- $ca := genCA "ucp-ca" 3650 }}
+{{- $cn := printf "ucp" }}
+{{- $altName1 := printf "ucp.%s" .Release.Namespace }}
+{{- $altName2 := printf "ucp.%s.svc" .Release.Namespace }}
+{{- $altName3 := printf "ucp.%s.svc.cluster" .Release.Namespace }}
+{{- $altName4 := printf "ucp.%s.svc.cluster.local" .Release.Namespace }}
+{{- $cert := genSignedCert $cn nil (list $altName1 $altName2 $altName3 $altName4) 3650 $ca }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ucp-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ucp
+    app.kubernetes.io/part-of: radius
+data:
+  tls.crt: {{ include "secrets.lookup" (dict "secret" "ucp-cert" "namespace" .Release.Namespace "key" "tls.crt" "defaultValue" $cert.Cert) }}
+  tls.key: {{ include "secrets.lookup" (dict "secret" "ucp-cert" "namespace" .Release.Namespace "key" "tls.key" "defaultValue" $cert.Key) }}
+  ca.crt: {{ include "secrets.lookup" (dict "secret" "ucp-cert" "namespace" .Release.Namespace "key" "ca.crt" "defaultValue" $ca.Cert) }}
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha3.api.ucp.dev
+  labels:
+    app.kubernetes.io/name: ucp
+    app.kubernetes.io/part-of: radius
+spec:
+  group: api.ucp.dev
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    name: ucp
+    namespace: {{ .Release.Namespace }}
+  version: v1alpha3
+  caBundle: {{ include "secrets.lookup" (dict "secret" "ucp-cert" "namespace" .Release.Namespace "key" "ca.crt" "defaultValue" $ca.Cert) }}```

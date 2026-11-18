@@ -1,0 +1,14 @@
+apiVersion: platform.example.org/v1alpha1
+kind: Cell
+metadata: {name: a, namespace: default}
+spec: {allowFrom: [b]}
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Cell
+metadata: {name: b, namespace: default}
+spec: {dependsOn: [a]}
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Cell
+metadata: {name: c, namespace: default}
+spec: {dependsOn: [a]}

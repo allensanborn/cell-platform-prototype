@@ -1,0 +1,278 @@
+---
+type: source
+resource: https://docs.kratix.io/main/reference/kratix-config/config
+title: "Kratix Config"
+source_kind: webpage
+tags: [kratix, configuration, reconciliation, resource-bindings]
+timestamp: 2026-11-13T00:00:00Z
+fetch_note: "gh api repos/syntasso/kratix-docs/contents/docs/main/03-reference/19-kratix-config/kratix-config.md -H Accept: application/vnd.github.raw (2026-11-13), main@169418223c15b2fc231f80890db7842e5e77e550; raw MDX/markdown source byte-for-byte, Docusaurus components not rendered; resource URL is the docs.kratix.io slug for this file."
+---
+
+---
+description: Configuring Kratix
+title: Configuring Kratix
+id: config
+---
+
+Kratix can be configured and customised via two ConfigMaps; Kratix Config and Kratix Pipeline Adapter Config.
+
+## Kratix Config
+
+When Kratix starts, it reads the `kratix` `ConfigMap` from the
+`kratix-platform-system` namespace. This `ConfigMap` allow you to configure
+various parts of Kratix and follows the format outlined below. It is loaded when
+the `kratix-platform-controller-manager` pod starts within the same namespace.
+
+If any changes are made to the `ConfigMap`, you will need to restart the
+`kratix-platform-controller-manager` pod to apply the updated configuration.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kratix
+  namespace: kratix-platform-system
+data:
+  config: |
+    numberOfJobsToKeep: 5
+    selectiveCache: false
+    reconciliationInterval: "10h"
+    workPlacementRewriteInterval: "10h"
+    controllerLeaderElection:
+      leaseDuration: 15s
+      renewDeadline: 10s
+      retryPeriod: 2s
+    resourceBindingVersionStrategy: "floating" # floating (default) or pinned
+    featureFlags:
+      dryRun: false # preview feature; see below
+    workflows:
+      reconcileAfterFailure: true
+      jobOptions:
+        defaultBackoffLimit: 6
+        defaultTTLSecondsAfterFinished: 3600 # seconds to keep a finished Job and its Pods; omit to disable automatic Job cleanup
+        podTTLSecondsAfterFinished: 3600 # seconds to keep completed Job Pods before cleanup; omit to use Kubernetes default
+      defaultImagePullPolicy: IfNotPresent # can be `IfNotPresent`, `Always`, or `Never`
+      defaultContainerResources: # optional; default CPU/memory requests and limits for pipeline containers
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+      defaultContainerSecurityContext:
+        runAsNonRoot: false
+      defaultContainerResources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+          ephemeral-storage: "256Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+          ephemeral-storage: "256Mi"
+    logging:
+      level: "info" # one of info, warning, debug, trace
+      structured: false # if true, emit logs as json
+    git:
+      minimumFetchInterval: "5s" # how often to fetch remote Git state before a write; 0s fetches every time
+    telemetry:
+      traces:
+        enabled: true # false to disable traces
+      metrics:
+        enabled: true # false to disable metrics
+      endpoint: grafana-k8s-monitoring-alloy-receiver.default.svc.cluster.local:4317 # exporter endpoint
+      protocol: grpc # or http
+      insecure: true
+      headers: # additional headers if required
+        authorization: "Bearer <grafana-api-token>"
+```
+
+### numberOfJobsToKeep (default: 5)
+
+The total number of completed Kratix workflow jobs to keep in the cluster. The oldest jobs will be deleted as new jobs are created.
+
+### selectiveCache (default: false)
+
+Enable label selector caching of Secrets on the cluster to optimise memory usage. Secrets used by Kratix must be labelled with `app.kubernetes.io/part-of=kratix`.
+
+### reconciliationInterval (default: 10h)
+
+The interval on which Kratix will rerun Configure workflows for both Promises and Resources.
+This is the platform-wide default; a Promise can override it via
+[`spec.workflows.config.reconciliationInterval`](/main/reference/workflows#reconciliation-interval).
+
+### workPlacementRewriteInterval (default: 10h)
+
+The interval on which each WorkPlacement re-writes its files to the destination's
+state store, even when nothing has changed, so drift in the state store is
+corrected.
+
+WorkPlacements are already re-written whenever their Workflow re-runs on the
+[`reconciliationInterval`](#reconciliationinterval-default-10h). This setting adds
+a separate re-write timer that is independent of Workflow runs. Set it to `0` to
+disable it, so WorkPlacements are only re-written in response to changes.
+
+The re-write is a no-op when the files already match, as Git only commits and
+pushes when there is an actual change.
+
+:::warning
+Setting this too low can put significant load on your platform. Every
+WorkPlacement re-reconciles on each interval, and the cost scales with the number
+of WorkPlacements across all destinations. A short interval can lead to:
+
+- **State store load**: a Git fetch and reset per WorkPlacement on every interval,
+  which can trip provider rate limits (for example the GitHub API).
+- **Lock contention**: WorkPlacements sharing a state store are serialised behind a
+  per-repository lock, so frequent re-writes can queue up and delay genuine changes.
+
+Keep the interval as large as your drift-correction needs allow.
+:::
+
+### controllerLeaderElection
+
+Timeouts for the kratix controller's leader election. Defaults:
+
+- leaseDuration: 15s
+- renewDeadline: 10s
+- retryPeriod: 2s
+
+### resourceBindingVersionStrategy
+
+Controls the `spec.version` Kratix sets on a [Resource Binding](/main/reference/promises/promise-upgrade/resource-bindings) when it is first created. This determines whether a Resource Request automatically follows new [Promise Revisions](/main/reference/promises/promise-upgrade/promise-revisions) or stays pinned to the version it was created at.
+
+- `floating` (default): new Resource Bindings are set to `latest`. The binding always tracks whichever Promise Revision is currently marked as `latest`, so when the Promise is upgraded to a new version the Resource Request is automatically re-reconciled against it.
+- `pinned`: new Resource Bindings are set to the resolved latest version at the time of creation (for example `v1.2.0`). The binding stays locked to that Promise Revision, and later Promise upgrades do not automatically flow through to the Resource.
+
+This strategy only sets the _initial_ value of the binding. You can always change a binding's `spec.version` later to upgrade or pin a Resource — see the [Upgrading a Promise](/main/guides/upgrading-resource-requests) guide.
+
+### featureFlags
+
+Opts in to features that are off by default. Feature flags are read once at
+startup, so changing one requires restarting the
+`kratix-platform-controller-manager` pod.
+
+#### dryRun (default: false)
+
+Set to `true` to enable [Dry Run](/main/reference/dry-run), which previews the
+output of a Resource Request without applying it to a real Destination. While the
+flag is off, Kratix does not start the controller that reconciles `DryRun`
+objects and ignores dry-run labels elsewhere.
+
+:::warning
+Dry Run is a preview feature and is not production ready. Its API and behaviour
+may change without a migration path. See [Dry Run](/main/reference/dry-run) before
+enabling it.
+:::
+
+### Workflows
+
+Default configurations for Kratix Workflows. Any options configured within individual workflows will take precedence over those in the Kratix Config.
+
+#### reconcileAfterFailure (default: true)
+
+Controls whether periodic reconciliation reruns Promise and Resource Configure
+workflows after a failed run. When `false`, periodic reconciliation skips failed
+workflows, but manual reconciliation of a
+[Promise](/main/reference/promises/reconciliation-labels#manual-reconciliation)
+or [Resource](/main/reference/resources/reconciliation-labels#manual-reconciliation)
+still rerun them. This setting does not affect successful runs or Delete workflows.
+
+#### jobOptions
+
+Options for the Jobs that are created by Kratix Workflows.
+
+##### defaultBackoffLimit
+
+The number of times to retry a failing workflow Job before marking it failed. This configures the [backoffLimit](https://kubernetes.io/docs/concepts/workloads/controllers/job/#pod-backoff-failure-policy) in Workflow Jobs. This will default to the Kubernetes Job default of 6.
+
+##### defaultTTLSecondsAfterFinished
+
+The number of seconds Kubernetes retains a finished workflow Job and its Pods.
+A Pipeline can override this value with `spec.jobOptions.ttlSecondsAfterFinished`.
+The minimum accepted value is 120 (seconds). Values below 120 will write a warning to the controller logs and Kratix will use 120 seconds instead.
+Omit this setting to disable automatic Job cleanup. See [TTL mechanism for
+finished Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/).
+
+##### podTTLSecondsAfterFinished
+
+The number of seconds to retain completed workflow Job Pods before they are cleaned up. When set, Kratix runs a controller that deletes Pods belonging to completed Jobs after this TTL. Omit to use the Kubernetes default (Pods are retained until the Job is deleted). Must be greater than zero when set.
+
+#### defaultContainerResources
+
+Default CPU and memory requests and limits for pipeline containers. Pipeline-level `resources` override these defaults. When omitted, Kratix uses built-in defaults (100m/128Mi requests, 200m/256Mi limits).
+
+#### defaultImagePullPolicy
+
+When to pull the images specified in Workflows. This configures the [imagePullPolicy](https://kubernetes.io/docs/concepts/containers/images/#updating-images) in Workflow Jobs. Can be `IfNotPresent`, `Always`, or `Never`
+
+#### defaultContainerSecurityContext
+
+The [Security Context](/main/reference/workflows#security-context) to apply to all Workflow Pods.
+
+### logging
+
+Logging configuration for the Kratix Controller Manager pod logs.
+
+#### level (default: "info")
+
+The log level. Can be "info", "warning", "debug" or "trace".
+
+The different log levels and their meanings are described in the table below:
+
+| Level / Severity | Target Audience           | Usage Guidelines                                                                                                                     | Examples                                                                                                     |
+|------------------|-------------------|--------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| ERROR            | All               | <ul><li>Something is permanently broken and may require human intervention</li></ul>                                                                   | <ul><li>Invalid YAMLs</li><li>Can't talk to Git server</li><li>Invalid Bucket endpoints</li></ul>                                        |
+| WARNING          | All               | <ul><li>Something is temporarily broken but may fix itself within the Reconciliation loop</li></ul>                                                    | <ul><li>Promise is unavailable</li><li>State Store secret not found</li><li>No available destinations</li></ul>                          |
+| INFO             | Platform Operator | <ul><li>Heartbeat of the platform</li><li>Reconciliation-level logs</li><li>Business relevant actions completed</li><li>A resource status has changed</li></ul> | <ul><li>Reconciliation started and ended</li><li>Scheduling work to a destination</li><li>Next reconciliation time</li></ul>            |
+| DEBUG            | Platform Operator / Platform Engineer | <ul><li>Function-level logs</li><li>Transitional errors</li><li>Code actions completed</li></ul>                                                             | <ul><li>Applying the Promise API</li><li>Running a Pipeline for a Resource</li><li>Creating a WorkPlacement</li></ul>                    |
+| TRACE            | Kratix Developer  | <ul><li>Pre and Post actions</li><li>Used to identify a particular line/area of code</li></ul>                                                            | <ul><li>Creating auxiliary resources</li><li>Verifying if there's a pipeline in progress</li><li>Calculating Promise Spec hash</li></ul> |
+
+
+#### structured (default: false)
+
+Set to true to emit logs as json.
+
+### git
+
+Configuration for how Kratix interacts with Git [State Stores](/main/reference/statestore/intro).
+
+#### minimumFetchInterval (default: 5s)
+
+Before writing to a Git State Store, Kratix fetches the latest remote state and resets its cached clone to match. This makes writes start from the true remote state, so Kratix recovers when the repository has been changed outside of Kratix (for example a manual commit, or a Flux or Argo prune).
+
+`minimumFetchInterval` bounds how often that fetch happens. Writes to a State Store are serialised, so when many Workplacements reconcile against the same store in a burst, Kratix only refreshes the clone once per interval rather than fetching for every write. Set it to `0s` to fetch before every write.
+
+This value is loaded when the `kratix-platform-controller-manager` pod starts, so restart the pod after changing it.
+
+### telemetry
+
+Telemetry configuration for Kratix. Configures OpenTelemetry export for traces and metrics.
+
+- **endpoint**: OTLP exporter endpoint (e.g. `grafana-k8s-monitoring-alloy-receiver.default.svc.cluster.local:4317`).
+- **protocol**: OTLP protocol; `grpc` (default) or `http`.
+- **insecure**: Set to `true` to skip TLS verification when connecting to the endpoint.
+- **headers**: Optional map of headers (e.g. `authorization: "Bearer <token>"`) for authenticated endpoints.
+- **traces.enabled**: Set to `false` to disable trace export. Defaults to `true` when telemetry is configured.
+- **metrics.enabled**: Set to `false` to disable metrics export. Defaults to `true` when telemetry is configured.
+
+## Kratix Pipeline Adapter Config
+
+When Kratix schedules work as part of either Promise or Resource workflows,
+by default, it uses the `PIPELINE_ADAPTER_IMG` image specified in the
+`kratix-platform-pipeline-adapter-config` configmap in the `kratix-platform-system` namespace. To
+override this image, which is necessary when deploying Kratix in an air-gapped
+environment, you can update this configmap to point to an internally hosted
+version of the image.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kratix-platform-pipeline-adapter-config
+  namespace: kratix-platform-system
+...
+//highlight-start
+data:
+  PIPELINE_ADAPTER_IMG: org-registry.org/team/kratix-platform-pipeline-adapter:v0.2.0
+//highlight-end
+```

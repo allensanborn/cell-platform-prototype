@@ -1,0 +1,12 @@
+t=0s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=6s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=13s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=19s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=25s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=31s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=38s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=44s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=50s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=57s deps=Unknown/ res=Unknown/ crd=0 gizmo=0
+t=63s deps=Unknown/ res=OutOfSync/Running crd=0 gizmo=0
+t=69s deps=Synced/Succeeded res=Synced/Succeeded crd=1 gizmo=1

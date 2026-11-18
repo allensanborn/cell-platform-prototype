@@ -1,0 +1,132 @@
+# Cell Promise prototype: one request -> one ambient namespace with a waypoint (west door),
+# a ztunnel "waypoint-only" fence, a waypoint L7 allow-list of caller cells, and a Cilium
+# egress allow-list of the cells it depends on (east fence).
+apiVersion: platform.kratix.io/v1alpha1
+kind: Promise
+metadata:
+  name: cell
+  labels:
+    kratix.io/promise-version: v0.2.0
+spec:
+  api:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: cells.platform.example.org
+    spec:
+      group: platform.example.org
+      names: {kind: Cell, plural: cells, singular: cell}
+      scope: Namespaced
+      versions:
+        - name: v1alpha1
+          served: true
+          storage: true
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    allowFrom: {type: array, items: {type: string}, description: "cells allowed to call this cell (west)"}
+                    dependsOn: {type: array, items: {type: string}, description: "cells this cell may call (east)"}
+                    hostname: {type: string, description: "public hostname on the shared north gateway; empty = not public"}
+  workflows:
+    resource:
+      configure:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: render-cell
+          spec:
+            containers:
+              - name: render
+                image: mikefarah/yq:4.44.3
+                command: ["/bin/sh", "-c"]
+                args:
+                  - |
+                    set -eu
+                    IN=/kratix/input/object.yaml
+                    N=$(yq '.metadata.name' $IN)
+                    NS=cell-$N
+                    STAMP=v0.2.0
+                    HOST=$(yq -r '.spec.hostname // ""' $IN)
+                    cat > /kratix/output/cell.yaml <<EOF
+                    apiVersion: v1
+                    kind: Namespace
+                    metadata:
+                      name: $NS
+                      labels:
+                        cell: "$N"
+                        istio.io/dataplane-mode: ambient
+                        istio.io/use-waypoint: waypoint
+                        istio.io/ingress-use-waypoint: "true"
+                        platform.example.org/cell-template: "$STAMP"
+                    ---
+                    apiVersion: gateway.networking.k8s.io/v1
+                    kind: Gateway
+                    metadata: {name: waypoint, namespace: $NS, labels: {istio.io/waypoint-for: service}}
+                    spec:
+                      gatewayClassName: istio-waypoint
+                      listeners: [{name: mesh, port: 15008, protocol: HBONE}]
+                    ---
+                    # west fence: ztunnel admits only the waypoint's identity
+                    apiVersion: security.istio.io/v1
+                    kind: AuthorizationPolicy
+                    metadata: {name: waypoint-only, namespace: $NS}
+                    spec:
+                      action: ALLOW
+                      rules: [{from: [{source: {principals: ["cluster.local/ns/$NS/sa/waypoint"]}}]}]
+                    EOF
+                    # west door: waypoint L7 allow-list of caller cells
+                    {
+                      echo "---"
+                      echo "apiVersion: security.istio.io/v1"
+                      echo "kind: AuthorizationPolicy"
+                      echo "metadata: {name: allow-callers, namespace: $NS}"
+                      echo "spec:"
+                      echo "  targetRefs: [{kind: Gateway, group: gateway.networking.k8s.io, name: waypoint}]"
+                      echo "  action: ALLOW"
+                      echo "  rules:"
+                      echo "  - from:"
+                      echo "    - source:"
+                      echo "        namespaces: [\"$NS\"$( [ -n "$HOST" ] && printf ', "platform-ingress"')$(yq -r '.spec.allowFrom // [] | .[] | ", \"cell-" + . + "\""' $IN | tr -d '\n')]"
+                    } >> /kratix/output/cell.yaml
+                    # east fence: Cilium egress allow-list (own cell, declared deps, DNS, istio-system)
+                    {
+                      echo "---"
+                      echo "apiVersion: cilium.io/v2"
+                      echo "kind: CiliumNetworkPolicy"
+                      echo "metadata: {name: east-allowlist, namespace: $NS}"
+                      echo "spec:"
+                      echo "  endpointSelector: {}"
+                      echo "  egress:"
+                      echo "  - toEndpoints:"
+                      echo "    - matchLabels: {k8s:io.kubernetes.pod.namespace: $NS}"
+                      echo "    - matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns}"
+                      echo "    - matchLabels: {k8s:io.kubernetes.pod.namespace: istio-system}"
+                      echo "    - matchLabels: {k8s:io.kubernetes.pod.namespace: istio-egress}"
+                      for d in $(yq -r '.spec.dependsOn // [] | .[]' $IN); do
+                        echo "    - matchLabels: {k8s:io.kubernetes.pod.namespace: cell-$d}"
+                      done
+                    } >> /kratix/output/cell.yaml
+                    if [ -n "$HOST" ]; then
+                    cat >> /kratix/output/cell.yaml <<EOF
+                    ---
+                    apiVersion: gateway.networking.k8s.io/v1
+                    kind: ListenerSet
+                    metadata: {name: north, namespace: $NS}
+                    spec:
+                      parentRef: {name: north, namespace: platform-ingress, kind: Gateway, group: gateway.networking.k8s.io}
+                      listeners: [{name: http, port: 80, protocol: HTTP, hostname: "$HOST"}]
+                    ---
+                    apiVersion: gateway.networking.k8s.io/v1
+                    kind: HTTPRoute
+                    metadata: {name: north, namespace: $NS}
+                    spec:
+                      parentRefs: [{name: north, kind: ListenerSet, group: gateway.networking.k8s.io}]
+                      hostnames: ["$HOST"]
+                      rules: [{backendRefs: [{name: echo, port: 80}]}]
+                    EOF
+                    fi
+                    cat /kratix/output/cell.yaml

@@ -1,0 +1,13 @@
+# East fence as a cluster-scoped object a tenant with namespace RBAC cannot edit.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata: {name: east-allowlist-cell-b}
+spec:
+  endpointSelector: {matchLabels: {k8s:io.kubernetes.pod.namespace: cell-b}}
+  egress:
+    - toEndpoints:
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: cell-b}
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns}
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: istio-system}
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: istio-egress}
+        - matchLabels: {k8s:io.kubernetes.pod.namespace: cell-a}

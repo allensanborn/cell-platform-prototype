@@ -1,0 +1,12 @@
+apiVersion: policy.networking.k8s.io/v1beta1
+kind: ClusterNetworkPolicy
+metadata: {name: platform-deny-b-to-a-v1beta1}
+spec:
+  tier: Admin
+  priority: 10
+  subject:
+    namespaces: {matchLabels: {cell: b}}
+  egress:
+    - name: deny-b-to-a
+      action: Deny
+      to: [{namespaces: {matchLabels: {cell: a}}}]

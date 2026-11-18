@@ -1,0 +1,47 @@
+# Argo CD health for Crossplane XR kinds: without this Argo reports an XR Healthy whatever its Ready condition says.
+# Merge into argocd-cm (kubectl patch --type merge). One key per kind: resource.customizations.health.<group>_<Kind>.
+data:
+  resource.customizations.health.platform.example.org_XCell: |
+    hs = {status = "Progressing", message = "Waiting for the composite resource to report Ready"}
+    if obj.status ~= nil and obj.status.conditions ~= nil then
+      for _, c in ipairs(obj.status.conditions) do
+        if c.type == "Synced" and c.status == "False" then
+          hs.status = "Degraded"
+          hs.message = c.message or c.reason or "Synced=False"
+          return hs
+        end
+      end
+      for _, c in ipairs(obj.status.conditions) do
+        if c.type == "Ready" then
+          if c.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "Ready"
+          else
+            hs.message = (c.reason or "Not ready") .. ": " .. (c.message or "")
+          end
+        end
+      end
+    end
+    return hs
+  resource.customizations.health.platform.example.org_Database: |
+    hs = {status = "Progressing", message = "Waiting for the composite resource to report Ready"}
+    if obj.status ~= nil and obj.status.conditions ~= nil then
+      for _, c in ipairs(obj.status.conditions) do
+        if c.type == "Synced" and c.status == "False" then
+          hs.status = "Degraded"
+          hs.message = c.message or c.reason or "Synced=False"
+          return hs
+        end
+      end
+      for _, c in ipairs(obj.status.conditions) do
+        if c.type == "Ready" then
+          if c.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "Ready"
+          else
+            hs.message = (c.reason or "Not ready") .. ": " .. (c.message or "")
+          end
+        end
+      end
+    end
+    return hs

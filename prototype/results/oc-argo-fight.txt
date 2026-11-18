@@ -1,0 +1,25 @@
+t=1s binding=echo-websocket-service-68f7db6495 releases=4 argo=Synced/Succeeded syncs=1
+t=12s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=22s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=33s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=43s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=54s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=65s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=75s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=86s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=97s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=108s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=119s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=129s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=140s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=150s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=161s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=171s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=181s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=192s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=203s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=213s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=224s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=234s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=246s binding=echo-websocket-service-68f7db6495 releases=4 argo=OutOfSync/Succeeded syncs=1
+t=0s binding=68f7db6495 syncs=1 argo=OutOfSync

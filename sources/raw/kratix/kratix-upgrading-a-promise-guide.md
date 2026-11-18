@@ -1,0 +1,276 @@
+---
+type: source
+resource: https://docs.kratix.io/main/guides/upgrading-resource-requests
+title: "Upgrading a Promise"
+source_kind: webpage
+tags: [kratix, upgrades, promise-revisions, resource-bindings]
+timestamp: 2026-11-13T00:00:00Z
+fetch_note: "gh api repos/syntasso/kratix-docs/contents/docs/main/04-guides/06-upgrading-resource-requests.mdx -H Accept: application/vnd.github.raw (2026-11-13), main@169418223c15b2fc231f80890db7842e5e77e550; raw MDX/markdown source byte-for-byte, Docusaurus components not rendered; resource URL is the docs.kratix.io slug for this file."
+---
+
+---
+description: A guide to upgrading Promises and resource requests with PromiseRevisions and ResourceBindings
+title: Upgrading a Promise
+keywords: [promise upgrades, resource upgrades, resource bindings, promise bindings, versioning, updates]
+---
+
+Kratix Promises provide a means of providing Anything-as-a-Service. The Promise
+API equips users with the ability to tailor a given service to their needs.
+Essential business rules can be embedded within Promise workflows and the
+continuous reconciliation of resources helps ensure resources are kept
+up-to-date.
+
+During an upgrade, any part of the Promise can change:
+
+* The API
+* The Dependencies
+* The Workflows
+* The Destination Selectors
+
+Kratix applies the following rules when upgrading a Promise:
+
+* Changes to the API are left to Kubernetes
+* Promises have Revisions
+* Destinations are always on the latest installed Promise Revision
+* Resource requests are associated to a Promise Revision
+
+This guide will illustrate how you could control how and when resource requests are upgraded when a new version of a Promise is installed.
+
+## Updating the API
+
+When introducing changes to Promise API, it is essential to ensure that the changes are backwards-compatible.
+For instance, when a Resource Configure workflow runs for the updated Promise, it should not fail because of a newly-introduced change to the API.
+
+Let's say we have an `app` promise, and we want to introduce the ability to configure a database.
+When selecting a database, consumers should be able to configure a size of `small`, `medium` or `large`.
+This new configurability can be added to the API by introducing a new field, like:
+
+```yaml
+spec: # Promise spec
+  api:
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            ...
+            properties:
+              #highlight-start
+              dbSize:
+                type: string
+              #highlight-end
+```
+
+This is a backwards-compatible change, as introducing a new field should not cause issues when the field is not present.
+If your updates to the API include changes such as changing the type of an existing field,
+making an existing field required, or removing a field, these could be breaking
+changes to your API contract and your API is no longer backwards-compatible.
+Introducing a new API group and adding a conversion webhook will be required to support breaking changes to the API.
+
+## Updates to Workflows
+
+With the new field `spec.dbSize` added to our Promise API, we would like to start using it in our workflow to deploy a database for our applications.
+
+However, we don't want existing resource requests to be impacted by this new feature of the Promise.
+
+This is where [Promise Revisions](/main/reference/promises/promise-upgrade/promise-revisions) and [Resource Bindings](/main/reference/promises/promise-upgrade/resource-bindings) come into play. Promise Revisions track different versions of a Promise, and the Resource Bindings control the version of the Promise that a resource request was created from.
+
+For example, given our app Promise:
+
+```yaml
+apiVersion: platform.kratix.io/v1alpha1
+kind: Promise
+metadata:
+  labels:
+    kratix.io/promise-version: v0.0.1
+  name: app
+spec:
+  api:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: apps.workshop.kratix.io
+    spec:
+      group: workshop.kratix.io
+      names:
+        kind: App
+        plural: apps
+        singular: app
+      scope: Namespaced
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              properties:
+                spec:
+                  properties:
+                    image:
+                      type: string
+                  type: object
+              type: object
+          served: true
+          storage: true
+  workflows:
+    resource:
+      configure:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: mypipeline
+          spec:
+            containers:
+              - command:
+                  - resource-configure
+                image: kratix-workshop/app-pipeline-image:v1.0.0
+                name: kratix-workshop-app-pipeline-image
+```
+
+We would like to introduce `.spec.dbSize` to the Promise API, and add a new container to the existing Resource Configure
+workflow pipeline to deploy a database for the application. The updated promise would look like this:
+
+```yaml
+apiVersion: platform.kratix.io/v1alpha1
+kind: Promise
+metadata:
+  labels:
+    #highlight-start
+    kratix.io/promise-version: v0.0.2 # new Promise version
+    #highlight-end
+  name: app
+spec:
+  api:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: apps.workshop.kratix.io
+    spec:
+      group: workshop.kratix.io
+      names:
+      ...
+      scope: Namespaced
+      versions:
+        - name: v1
+          schema:
+            openAPIV3Schema:
+              properties:
+                spec:
+                  properties:
+                    #highlight-start
+                    dbDriver: # new API field
+                      type: string
+                    #highlight-end
+                    image:
+                      type: string
+                  type: object
+              type: object
+          served: true
+          storage: true
+  workflows:
+    resource:
+      configure:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: mypipeline
+          spec:
+            containers:
+              - name: kratix-workshop-app-pipeline-image
+                command: [resource-configure]
+                image: kratix-workshop/app-pipeline-image:v1.0.0
+              #highlight-start
+              - name: database-configure # new container to deploy a database
+                image: kratix-workshop/app-pipeline-image:v1.0.0
+                command: [ database-configure ]
+              #highlight-end
+```
+
+After applying this new version of our app Promise, we should see two Promise Revisions created in our environment:
+
+```shell-session
+$ kubectl get promiserevisions
+NAME        PROMISE   VERSION   LATEST
+app-abcde   app       v0.0.1
+app-fghij   app       v0.0.2    true
+```
+
+You can see that the version `v0.0.2` is being marked as the latest Promise Revision. New app resource requests will be
+automatically bound to the `v0.0.2` version, which includes our changes to the Promise API and the new container in the
+Resource Configure workflow.
+
+By default, Kratix associates new resource requests to the `latest` Promise Revision. When a new revision is created
+those resources will be automatically upgraded. Any Resource Binding that is pinned to a specific version will not be
+upgraded automatically. To trigger an upgrade on those resources you can edit the Resource Binding directly.
+
+Another way that we can ensure that the addition of the workflow does not deploy any unexpected database for existing
+resources is via the `database-configure` container itself. The script run within the container can guard against the
+property being absent from the resource request. Take to following example:
+
+```python
+import kratix_sdk as ks
+import yaml
+
+# Initialize the sdk
+sdk = ks.KratixSDK()
+resource = sdk.read_resource_input()
+
+# Read from resource input
+dbSize = resource.get_value("spec.dbSize", default="not-set")
+
+if dbSize == "not-set"
+    print("no dbSize configured, skipping database deployment")
+    exit(0)
+
+# ...
+```
+
+If the Resource Configure Workflow runs for a resource request which does not have a `dbSize` in it's spec, the script
+above will exit early. This means that if a user _did_ update their Resource Binding to a Promise Version where the
+`database-configure` container ran, it wouldn't fail or deploy any unexpected database.
+
+## Upgrading Resource Requests
+
+To upgrade a resource request that is bound to a previous Promise Revision, you can edit the existing Resource Binding
+`spec.version` and point it to the desired Promise Revision version. In our example, we had a Resource Request bound to
+`v0.0.1`. To upgrade it, edit it as follows:
+
+```yaml
+apiVersion: platform.kratix.io/v1alpha1
+kind: ResourceBinding
+metadata:
+  labels:
+    kratix.io/promise-name: app
+    kratix.io/resource-name: app-a
+  name: app-a-c42a2
+  namespace: default
+spec:
+  promiseRef:
+    name: app
+  resourceRef:
+    name: app-a
+    namespace: default
+  # highlight-next-line
+  version: v0.0.2 # changed from v0.0.1 to v0.0.2
+```
+
+Once that change is applied, Kratix will run the Resource Configure Workflow for the target resource using the `v0.0.2`
+Promise Revision.
+
+:::tip Want enterprise-grade upgrade control?
+
+Editing bindings one at a time works for a handful of Resources, but it does not scale to a fleet. **Syntasso Kratix
+Enterprise** turns upgrades into a managed, repeatable process with [Upgrade Plans and Upgrade
+Runs](/ske/reference/promise-upgrades/intro): roll a new version out in ordered batches, canary it on a small group
+first, confine it to maintenance windows, hold it back during a change freeze, and run it on a schedule. The [Managing
+Promise Upgrades](/ske/guides/promise-upgrades) guide shows you how.
+
+:::
+
+## Conclusion
+
+Promise Revisions and Resource Bindings enable resources to be associated with different versions of a Promise, which
+allows the platform engineering team to control exactly when and how the fleet will be upgraded. This, together with
+health checks, allow more controlled upgrades in production environments.
+
+We hope this guide has given you a better understanding of how to control upgrades. If you have any questions or
+feedback please don't hesitate to reach out to us on [Slack](https://kratixworkspace.slack.com/) or [GitHub](https://github.com/syntasso/kratix).

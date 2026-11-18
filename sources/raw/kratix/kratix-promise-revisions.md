@@ -1,0 +1,129 @@
+---
+type: source
+resource: https://docs.kratix.io/main/reference/promises/promise-upgrade/promise-revisions
+title: "Promise Revisions"
+source_kind: webpage
+tags: [kratix, promise-revisions, upgrades, versioning]
+timestamp: 2026-11-13T00:00:00Z
+fetch_note: "gh api repos/syntasso/kratix-docs/contents/docs/main/03-reference/11-promises/04-promise-upgrade/01-promise-revisions.md -H Accept: application/vnd.github.raw (2026-11-13), main@169418223c15b2fc231f80890db7842e5e77e550; raw MDX/markdown source byte-for-byte, Docusaurus components not rendered; resource URL is the docs.kratix.io slug for this file."
+---
+
+---
+description: Documentation for the Kratix PromiseRevision Custom Resource
+title: Promise Revisions
+sidebar_label: Promise Revisions
+---
+
+# Promise Revisions
+
+Promise Revisions provide a mechanism for locking a Promise to a specific version.
+
+When a Promise is installed, Kratix will automatically create a Promise Revision for that Promise. This Promise Revision
+consists of a reference to the Promise, the desired version, and the `spec` of the Promise at
+that version, including the Promise API, dependencies and workflows. This
+initial Promise Revision will be labeled as the `latest` revision (via the `kratix.io/latest-revision` label).
+
+The Resource request for the Promise will be bound to the `latest` Promise Revision via a Resource Binding.
+
+:::info
+
+Promise Revisions are fully managed by Kratix. As a Kratix user, you will not need to create or update Promise
+Revisions manually.
+
+:::
+
+A Promise Revision will look like this:
+
+```yaml
+apiVersion: platform.kratix.io/v1alpha1
+kind: PromiseRevision
+metadata:
+  labels:
+    kratix.io/promise-name: promise-name
+  name: promise-name-abcde
+  # Name of the Promise Revision; Kratix derives this deterministically from the Promise name and version.
+spec:
+  promiseRef:
+    name: promise-name
+  promiseSpec:
+  # The full promise.spec of the Promise
+    api:
+    destinationSelectors:
+    workflows:
+  version: v0.1.0
+  # The version of the Promise as indicated by the kratix.io/promise-version label
+status: {}
+```
+
+## Updating a Promise
+
+Kratix will automatically generate a `latest` Promise Revision for the latest applied Promise. When a new
+_version_ of the Promise is installed, a new Promise Revision will be created reflecting the updated specification at the
+updated version. This newly created Promise Revision will be become the new `latest` revision.
+
+For example, if the Redis Promise is initially installed at `v0.1.0` (via the `kratix.io/promise-version` label) and then upgraded to `v0.2.0` (via the same label), there will be two Promise Revisions in the system, with `v0.2.0` labelled as the `latest`.
+
+```shell-session
+$ kubectl get promiserevisions
+NAME          PROMISE   VERSION   LATEST
+redis-abcde   redis     v0.1.0
+redis-fghij   redis     v0.2.0    true
+```
+
+Use the `PROMISE` and `VERSION` columns to identify a revision. The object name is stable for a given Promise name and
+version, but it is not intended to be parsed by clients.
+
+:::tip
+
+When a Promise is installed with no version tag, the Promise Revision will be created with a `version` configured as `not set`.
+
+:::
+
+If a Promise is updated, but the version already has a Promise Revision
+associated with it, the existing Promise Revision will be updated to reflect the
+updated Promise spec.
+
+:::warning
+
+Kratix _does not take_ [semantic versioning](https://semver.org/) into account
+when applying the `latest` label, as not all Promises might use it. This means
+that if you have version `0.2.0` installed and you install version `0.1.0`, the
+`latest` Promise version will be `0.1.0` because it is the most recently
+installed Promise.
+
+:::
+
+## Overriding the reconciliation interval
+
+A Promise author sets the
+[reconciliation interval](/main/reference/workflows#reconciliation-interval) in the Promise
+spec, which Kratix snapshots into each Promise Revision. A platform engineer can override
+that snapshot for a single revision, without publishing a new Promise version, with the
+`kratix.io/reconciliation-interval` annotation:
+
+```yaml
+apiVersion: platform.kratix.io/v1alpha1
+kind: PromiseRevision
+metadata:
+  name: redis-abcde
+  annotations:
+    kratix.io/reconciliation-interval: 30m
+```
+
+The annotation applies to the Promise (when the revision is `latest`) and to every Resource
+bound to the revision. Its value is a Go duration string of at least `1m`; unparseable or
+sub-minute values are rejected when the annotation is set or changed, and Kratix falls back
+to the revision's spec snapshot.
+
+## Deleting a Promise Revision
+
+Deleting a Promise Revision never deletes Resource Requests or Resource Bindings. If Resource Bindings still use
+the revision's version, Kratix will accept the deletion and emit a warning. The revision will be only be removed
+when no Resource Binding uses its version. 
+
+:::info
+
+The Promise Revision with the `latest` label cannot be deleted. To delete it, delete the Promise, which deletes all
+of its Resources first.
+
+:::

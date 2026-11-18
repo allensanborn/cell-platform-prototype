@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata: {name: cells, namespace: argocd}
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elements:
+          - {env: dev, server: "https://kubernetes.default.svc"}
+          - {env: prod, server: "SERVER_PROD"}
+  template:
+    metadata: {name: "cells-{{.env}}"}
+    spec:
+      project: default
+      sources:
+        - {repoURL: "http://gitea-http.gitea:3000/kratix/cells.git", targetRevision: main, path: platform}
+        - {repoURL: "http://gitea-http.gitea:3000/kratix/cells.git", targetRevision: main, path: "envs/{{.env}}"}
+      destination: {server: "{{.server}}"}
+      syncPolicy: {automated: {prune: true, selfHeal: true}}

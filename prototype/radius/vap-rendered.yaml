@@ -1,0 +1,14 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata: {name: deny-radprobe-deployments}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: radprobe}}
+    resourceRules: [{apiGroups: [apps], apiVersions: ["*"], operations: [CREATE, UPDATE], resources: [deployments]}]
+  validations: [{expression: "false", message: "probe: admission saw a Radius-rendered Deployment"}]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata: {name: deny-radprobe-deployments}
+spec: {policyName: deny-radprobe-deployments, validationActions: [Deny]}
