@@ -227,6 +227,8 @@ Gotchas, in the order they bit:
 
 floci's own docs say account selection by access key "is not proof that the caller possesses the corresponding secret". Trust-policy tests need enforcement on.
 
+The enforcement-on column was re-run on 2026-11-19 with both provider pods behind the egress fence and the `AWS_ENDPOINT_URL_STS` workaround applied. Every row matched. No traffic from the providers was dropped, so the role-assumption calls stayed on floci.
+
 **Leak to real AWS, and the fix.** provider-aws-rds v2.8.1 (family v2.9.0) sends the STS AssumeRole for `assumeRoleChain` to **`https://sts.us-east-1.amazonaws.com`**. It ignores the ProviderConfig `endpoint`, even with `sts` in `endpoint.services`.
 
 - **The leak.** For about 7 minutes, two probe Databases retried signed AssumeRole calls against real AWS STS. They carried floci placeholder keys only, so AWS rejected them with `InvalidClientTokenId`; no real credentials were involved and nothing was created.
@@ -235,7 +237,7 @@ floci's own docs say account selection by access key "is not proof that the call
 
 **Role permission scoping (enforcement on).** I cut team-a's role to `rds:Describe*`:
 
-- A new `Database` failed with `AccessDenied … not authorized to perform: rds:CreateDBInstance`, surfaced on the MR.
+- A new `Database` failed with `AccessDenied … not authorized to perform: rds:CreateDBInstance`, surfaced on the MR. The 2026-11-19 fenced re-run got the same result: a 403 on `CreateDBInstance`.
 - The existing database kept syncing Ready on Describe alone.
 - No instance was created.
 - The denied MR stayed stuck deleting (finalizer held) until `rds:*` was restored, then cleared in about 10 s with nothing created. This was observed, not root-caused.

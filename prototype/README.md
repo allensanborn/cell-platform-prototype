@@ -42,7 +42,7 @@ kgateway v2.5.2 (`oci://cr.kgateway.dev/kgateway-dev/charts/kgateway{-crds}`) eg
 ## Round 6: per-team accounts on floci
 
 - Start a dedicated floci: `docker run -d --name xp-floci -p 127.0.0.1:4590:4566 -v /var/run/docker.sock:/var/run/docker.sock -e FLOCI_BASE_URL=http://localhost:4590 -e FLOCI_DOCKER_RESOURCE_NAMESPACE=xp floci/floci:2.5.0`, then `docker network connect kind xp-floci`. Access key `111111111111` is team-a's account and `222222222222` is team-b's.
-- `kind/crossplane-team-database.yaml`: provider-aws-rds v2.8.1, function-auto-ready v0.6.0 and function-go-templating. Replace `FLOCI_URL` with `http://<xp-floci kind IP>:4566`, then create a `Database orders` in each team namespace.
+- `kind/crossplane-team-database.yaml`: installs provider-aws-rds v2.8.1, function-go-templating v0.13.1 and function-auto-ready v0.6.0, and creates a `Database orders` in each team namespace. Replace `FLOCI_URL` with `http://<xp-floci kind IP>:4566` and apply it twice (the Databases need the XRD first).
 - `kind/opentofu-team-workspaces.yaml`: provider-opentofu v1.1.10. Both modules come from the public registry, so no Gitea is needed: `cloudposse/dynamodb/aws` 0.37.0 and `terraform-aws-modules/rds/aws` 6.13.1 (7.x needs OpenTofu >= 1.11.1; the provider bundles 1.10.0). Same `FLOCI_URL` substitution. Apply `kind/provider-egress-fence.yaml` first; its second policy fences provider-opentofu to floci plus the registry and GitHub release hosts.
 - Verify with `AWS_ENDPOINT_URL=http://localhost:4590 AWS_ACCESS_KEY_ID=<team key> aws rds describe-db-instances` / `aws dynamodb list-tables`.
 
