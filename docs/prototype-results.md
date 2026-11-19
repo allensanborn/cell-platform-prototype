@@ -185,7 +185,7 @@ The setup was a dedicated floci 2.5.0 (`xp-floci`, port 4590, Docker resource na
 - A namespaced `Database` XRD whose Composition renders a namespaced `rds.aws.m.upbound.io` Instance that references ProviderConfig `aws`.
 - Each team namespace holds its own platform-owned `aws` ProviderConfig (credentials Secret with the team key; static floci endpoint).
 
-One Composition serves every team, because a namespaced MR resolves the ProviderConfig in its own namespace. A `Database orders` in each team namespace produced one Postgres instance in each team account and none in the default account. floci ran each as a real Postgres container.
+One Composition serves every team, because a namespaced MR resolves the ProviderConfig in its own namespace. A `Database orders` in each team namespace produced one Postgres instance in each team account and none in the default account. floci ran each as a real Postgres container. Re-run on 2026-11-19 with the provider pods behind the egress fence: both Databases were Ready in 91 s, with the same placement, and no traffic from the providers was dropped. A probe pod with the provider's label was blocked from real STS, and the drop monitor recorded it, so the fence and the monitor both worked.
 
 **Terraform modules through provider-opentofu v1.1.10.** Both are public, Apache-2.0 modules from the public registry. Both rows below were run on 2026-11-18 (kind, Cilium 1.20.4, Crossplane 2.4.2, floci 2.5.0), with the provider pod behind the egress fence. It resolved only `registry.opentofu.org`, `github.com` and `release-assets.githubusercontent.com`, and no non-ICMP traffic was dropped:
 
