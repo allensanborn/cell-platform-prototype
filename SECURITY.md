@@ -36,7 +36,7 @@ The manifests and scripts in `prototype/` build local test clusters (kind, k3d, 
 CI evaluates every pull request and blocks the merge on a violation.
 
 - **Dependencies (SCA).** Trivy scans for known-vulnerable dependencies. A HIGH or CRITICAL finding that has a fix blocks the merge. One found on `main` after the fact is fixed within 14 days, and before any release. A dependency must carry a license compatible with Apache-2.0.
-- **Static analysis (SAST).** shellcheck (warnings and errors) and Trivy's misconfiguration scanner run on every pull request. A shellcheck warning or a HIGH or CRITICAL misconfiguration blocks the merge, and one found on `main` is fixed within 14 days.
+- **Static analysis (SAST).** shellcheck (warnings and errors), Trivy's misconfiguration scanner and GitHub CodeQL (over the workflows) run on every pull request. A shellcheck warning, a HIGH or CRITICAL misconfiguration, or a CodeQL alert of high severity or above blocks the merge, and one found on `main` is fixed within 14 days.
 
 ## Findings that do not affect the project
 

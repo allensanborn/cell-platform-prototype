@@ -83,4 +83,4 @@ The project has made no release, so every control that starts "when the project 
 | VM-05.02 SCA violations fixed before release | Met | [SECURITY.md](../SECURITY.md). |
 | VM-05.03 Automated dependency evaluation blocks violations | Met | Trivy in the required `check` job. |
 | VM-06.01 SAST remediation threshold | Met | [SECURITY.md](../SECURITY.md). |
-| VM-06.02 Automated SAST blocks violations | Met | shellcheck and Trivy misconfiguration scanning in the required `check` job. |
+| VM-06.02 Automated SAST blocks violations | Met | shellcheck and Trivy misconfiguration scanning in the required `check` job. CodeQL default setup scans the workflows, and ruleset `main` blocks a merge on a high-severity alert. |
