@@ -47,6 +47,14 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Changing `main`
+
+`main` accepts changes only through a pull request (repository ruleset, no bypass). A direct `git push` to `main` is rejected.
+
+- Work on a branch and open a pull request. The `check` and `dco` jobs must pass before merge.
+- Sign off every commit: `git commit -s`. The `dco` job rejects a commit without `Signed-off-by`.
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Update [docs/openssf-baseline.md](docs/openssf-baseline.md) in the same pull request as any change to CI, repository settings or the policy files.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker
 
