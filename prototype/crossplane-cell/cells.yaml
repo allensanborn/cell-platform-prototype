@@ -1,0 +1,15 @@
+# Same three cells as kind/cells.yaml, as cluster-scoped XCells. Cell a is public.
+apiVersion: platform.example.org/v1alpha1
+kind: XCell
+metadata: {name: a}
+spec: {allowFrom: [b], hostname: a.example.test}
+---
+apiVersion: platform.example.org/v1alpha1
+kind: XCell
+metadata: {name: b}
+spec: {dependsOn: [a]}
+---
+apiVersion: platform.example.org/v1alpha1
+kind: XCell
+metadata: {name: c}
+spec: {dependsOn: [a]}

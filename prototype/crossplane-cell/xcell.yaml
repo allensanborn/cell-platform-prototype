@@ -1,0 +1,203 @@
+# Round 8: the whole cell from one Crossplane composition. Port of kind/cell-promise-v2.yaml,
+# with the east fence cluster-scoped (round 4) so a namespace admin cannot delete it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-compose-cells
+  labels: {rbac.crossplane.io/aggregate-to-crossplane: "true"}
+rules:
+  - {apiGroups: [""], resources: [namespaces], verbs: ["*"]}
+  - {apiGroups: [gateway.networking.k8s.io], resources: [gateways, listenersets, httproutes], verbs: ["*"]}
+  - {apiGroups: [security.istio.io], resources: [authorizationpolicies], verbs: ["*"]}
+  - {apiGroups: [cilium.io], resources: [ciliumclusterwidenetworkpolicies], verbs: ["*"]}
+---
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata: {name: xcells.platform.example.org}
+spec:
+  scope: Cluster
+  group: platform.example.org
+  names: {kind: XCell, plural: xcells}
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                allowFrom: {type: array, items: {type: string}, description: "cells allowed to call this cell (west)"}
+                dependsOn: {type: array, items: {type: string}, description: "cells this cell may call (east)"}
+                hostname: {type: string, description: "public hostname on the shared north gateway; empty = not public"}
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xcell
+  labels: {channel: stable}
+spec:
+  compositeTypeRef: {apiVersion: platform.example.org/v1alpha1, kind: XCell}
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          # None of these kinds has a Ready condition, so each carries the explicit ready annotation.
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $n := $xr.metadata.name }}
+            {{- $ns := printf "cell-%s" $n }}
+            {{- $spec := get $xr "spec" | default dict }}
+            {{- $host := get $spec "hostname" | default "" }}
+            ---
+            apiVersion: v1
+            kind: Namespace
+            metadata:
+              name: {{ $ns }}
+              labels:
+                cell: {{ $n | quote }}
+                istio.io/dataplane-mode: ambient
+                istio.io/use-waypoint: waypoint
+                istio.io/ingress-use-waypoint: "true"
+                platform.example.org/cell-template: r1
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: ns
+                gotemplating.fn.crossplane.io/ready: "True"
+            ---
+            # west door
+            apiVersion: gateway.networking.k8s.io/v1
+            kind: Gateway
+            metadata:
+              name: waypoint
+              namespace: {{ $ns }}
+              labels:
+                istio.io/waypoint-for: service
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: waypoint
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              gatewayClassName: istio-waypoint
+              listeners:
+                - name: mesh
+                  port: 15008
+                  protocol: HBONE
+            ---
+            # west fence: ztunnel admits only the waypoint's identity
+            apiVersion: security.istio.io/v1
+            kind: AuthorizationPolicy
+            metadata:
+              name: waypoint-only
+              namespace: {{ $ns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: west-fence
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              action: ALLOW
+              rules:
+                - from:
+                    - source:
+                        principals: ["cluster.local/ns/{{ $ns }}/sa/waypoint"]
+            ---
+            # west door: waypoint allow-list of caller cells
+            apiVersion: security.istio.io/v1
+            kind: AuthorizationPolicy
+            metadata:
+              name: allow-callers
+              namespace: {{ $ns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: west-callers
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              targetRefs:
+                - kind: Gateway
+                  group: gateway.networking.k8s.io
+                  name: waypoint
+              action: ALLOW
+              rules:
+                - from:
+                    - source:
+                        namespaces:
+                          - {{ $ns }}
+                          {{- if $host }}
+                          - platform-ingress
+                          {{- end }}
+                          {{- range (get $spec "allowFrom" | default list) }}
+                          - cell-{{ . }}
+                          {{- end }}
+            ---
+            # east fence: egress allow-list (own cell, declared deps, DNS, mesh, south door)
+            apiVersion: cilium.io/v2
+            kind: CiliumClusterwideNetworkPolicy
+            metadata:
+              name: east-cell-{{ $n }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: east-fence
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              endpointSelector:
+                matchLabels:
+                  k8s:io.kubernetes.pod.namespace: {{ $ns }}
+              egress:
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: {{ $ns }}
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: kube-system
+                        k8s-app: kube-dns
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: istio-system
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: istio-egress
+                    {{- range (get $spec "dependsOn" | default list) }}
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: cell-{{ . }}
+                    {{- end }}
+            {{- if $host }}
+            ---
+            # north attachment
+            apiVersion: gateway.networking.k8s.io/v1
+            kind: ListenerSet
+            metadata:
+              name: north
+              namespace: {{ $ns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: north-listeners
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              parentRef:
+                name: north
+                namespace: platform-ingress
+                kind: Gateway
+                group: gateway.networking.k8s.io
+              listeners:
+                - name: http
+                  port: 80
+                  protocol: HTTP
+                  hostname: {{ $host | quote }}
+            ---
+            apiVersion: gateway.networking.k8s.io/v1
+            kind: HTTPRoute
+            metadata:
+              name: north
+              namespace: {{ $ns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: north-route
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              parentRefs:
+                - name: north
+                  kind: ListenerSet
+                  group: gateway.networking.k8s.io
+              hostnames: [{{ $host | quote }}]
+              rules:
+                - backendRefs:
+                    - name: echo
+                      port: 80
+            {{- end }}

@@ -54,6 +54,13 @@ kgateway v2.5.2 (`oci://cr.kgateway.dev/kgateway-dev/charts/kgateway{-crds}`) eg
 - `kind/provider-sts-endpoint.yaml` (DeploymentRuntimeConfig with `AWS_ENDPOINT_URL_STS`), then `kind/crossplane-team-assume-role.yaml`. `iam-a` should provision into 111111111111; `iam-b`, using an untrusted key, should get AccessDenied.
 - Scoping: `aws iam put-role-policy --role-name crossplane-provisioner --policy-name rds --policy-document file://kind/iam/role-policy-rds-describe-only.json` in 111111111111, then create a new Database in `iam-a`: expect `rds:CreateDBInstance` AccessDenied. Delete it before restoring `rds:*`.
 
+## crossplane-cell/ — the whole cell in Crossplane (round 8, `kind-cellxp`)
+
+1. `crossplane-cell/up.sh` builds a separate cluster with no Kratix: kind, Cilium 1.20.4 with the ClusterNetworkPolicy flag on, Istio 1.32.0 ambient, Gateway API v1.5.0, Crossplane 2.4.2, function-go-templating v0.13.1. It then applies `kind/platform-ns.yaml`, `crossplane-cell/xcell.yaml` and `crossplane-cell/cells.yaml`. It writes its kubeconfig to `crossplane-cell/.kubeconfig`; export `KUBECONFIG` to that path for the steps below.
+2. `kind/test.sh setup`, wait for `gateway/waypoint` in `cell-a` to be Programmed, then `kind/test.sh` and `kind/test-ns.sh`.
+3. Controls: `kubectl annotate xcell a b crossplane.io/paused=true`, delete `authorizationpolicy/waypoint-only` in `cell-a` and `ccnp/east-cell-b`, rerun `kind/test.sh`. Delete `clusternetworkpolicy/platform-deny-world-egress` and rerun `kind/test-ns.sh`. Restore with `kubectl annotate xcell a b crossplane.io/paused-` and `kubectl apply -f kind/platform-ns.yaml`.
+4. `kind delete cluster --name cellxp`.
+
 ## hub/ — Argo CD hub ships XCells to two clusters (round 5)
 
 1. Install Crossplane 2.4.2 and function-go-templating on `k3d-openchoreo`.

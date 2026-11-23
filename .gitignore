@@ -5,3 +5,6 @@
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Round 8 cluster kubeconfig
+prototype/crossplane-cell/.kubeconfig

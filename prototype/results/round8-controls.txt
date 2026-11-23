@@ -1,0 +1,38 @@
+## drift repair, XCell a not paused: delete waypoint-only, poll every 1 s
+recreated after 0 s
+
+## control: XCells a and b paused, cell-a waypoint-only and east-cell-b deleted
+CASE                                         EXPECT     GOT
+b -> a svc (allowed caller, declared dep)    200        200
+c -> a svc (declared dep, not in allowFrom)  403        403
+b -> c svc (not a declared dep)              conn-fail  403
+a -> a svc (same cell)                       200        200
+rogue -> a svc (out of mesh)                 deny       200
+rogue -> a pod IP (bypass waypoint)          deny       200
+b -> a pod IP (bypass waypoint, in mesh)     deny       200
+
+## control: south, Admin ClusterNetworkPolicy deleted (east-cell-b still deleted)
+CASE                                               EXPECT                   GOT
+N1 internet -> a.example.test                      200 from cell-a echo     echo-f4c78bc6d-cld5b 200
+N2 internet -> b.example.test (not public)         404                       404
+S1 b -> httpbin.org (ServiceEntry, allowed)        200                       200
+S2 c -> httpbin.org (not allowed at waypoint)      403                      RBAC: access denied 403
+S3 b -> example.com (no ServiceEntry)              blocked                  sting and monitoring purposes.</p><script src=/s.js></script></body></html> 200
+S4 rogue -> example.com (no fence, baseline)       200                      sting and monitoring purposes.</p><script src=/s.js></script></body></html> 200
+
+## restored: unpaused, ClusterNetworkPolicy re-applied
+CASE                                         EXPECT     GOT
+b -> a svc (allowed caller, declared dep)    200        200
+c -> a svc (declared dep, not in allowFrom)  403        403
+b -> c svc (not a declared dep)              conn-fail  000conn-fail
+a -> a svc (same cell)                       200        200
+rogue -> a svc (out of mesh)                 deny       000conn-fail
+rogue -> a pod IP (bypass waypoint)          deny       000conn-fail
+b -> a pod IP (bypass waypoint, in mesh)     deny       000conn-fail
+CASE                                               EXPECT                   GOT
+N1 internet -> a.example.test                      200 from cell-a echo     echo-f4c78bc6d-cld5b 200
+N2 internet -> b.example.test (not public)         404                       404
+S1 b -> httpbin.org (ServiceEntry, allowed)        200                       200
+S2 c -> httpbin.org (not allowed at waypoint)      403                      RBAC: access denied 403
+S3 b -> example.com (no ServiceEntry)              blocked                   000
+S4 rogue -> example.com (no fence, baseline)       200                      sting and monitoring purposes.</p><script src=/s.js></script></body></html> 200
