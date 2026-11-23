@@ -246,6 +246,27 @@ The root cause of the STS leak is in provider-upjet-aws v2.8.1 (09d38f54), `inte
 
 When testing Crossplane against an emulator, fence the providers first. On real AWS the same behaviour would matter wherever STS must go to a private or regional endpoint (inference).
 
+## Round 8: the whole cell from one Crossplane composition (2026-11-23)
+
+Rounds 1 to 3 rendered the cell with the Kratix Promise. Round 4's Crossplane `XCell` rendered a Namespace and the east fence only. This round ports the rest, on a fresh kind cluster (`cellxp`) with no Kratix, Flux, MinIO or cert-manager: Cilium 1.20.4 with `k8sClusterNetworkPolicy.enabled=true`, Istio 1.32.0 ambient, Gateway API v1.5.0, Crossplane 2.4.2 and function-go-templating v0.13.1.
+
+One cluster-scoped `XCell` (`allowFrom`, `dependsOn`, `hostname`) renders the ambient Namespace, the waypoint Gateway, the `waypoint-only` and `allow-callers` AuthorizationPolicies, a CiliumClusterwideNetworkPolicy east fence, and for a public cell a ListenerSet and HTTPRoute. The platform side (`kind/platform-ns.yaml`) and both test scripts are unchanged.
+
+| Matrix | Result | Control |
+|---|---|---|
+| West and east, 7 cases (`kind/test.sh`) | All 7 as designed, identical to round 1 | With XCells `a` and `b` paused and cell-a's `waypoint-only` and `east-cell-b` deleted: the three bypasses returned **200** and b → c reached c's waypoint (**403**), as in round 1 |
+| North and south, 6 cases (`kind/test-ns.sh`) | All 6 as designed, identical to round 2 | With the Admin ClusterNetworkPolicy also deleted, b → `example.com` returned **200** |
+| After unpausing and re-applying the ClusterNetworkPolicy | All 13 as designed | |
+
+**What round 8 adds:**
+
+- **Crossplane alone renders the full cell.** The recommendation no longer rests on an inference from the Kratix runs.
+- **Drift repair is faster than a poll can see.** With the XCell not paused, a deleted `waypoint-only` policy was back before the first 1-second poll. Round 5 measured about 10 s for a NetworkPolicy through the hub setup; this is one cluster and one sample.
+- **A negative control needs the XR paused.** `crossplane.io/paused=true` on the XCell is what lets a fence stay deleted long enough to test. That is the tenant-proofing working, and it is also the step a conformance suite has to automate.
+- **Every composed kind needed the explicit ready annotation.** None of Namespace, Gateway, AuthorizationPolicy, CiliumClusterwideNetworkPolicy, ListenerSet or HTTPRoute has a `Ready` condition, so the XCell reports Ready once the objects are applied, not once the waypoint is Programmed. The test waited for the waypoint separately.
+
+Not covered by this round: N3 (the duplicate-hostname conflict), revision channels on the full composition, and the hub delivery of round 5. Raw output: `round8-west-east.txt`, `round8-north-south.txt`, `round8-controls.txt`.
+
 ## Not tested
 
 Cross-cluster cells, SKE UpgradePlans, Argo CD sync waves, and MutatingAdmissionPolicy (not served on this v1.35 kind cluster without a feature gate; Gatekeeper mutation stood in).

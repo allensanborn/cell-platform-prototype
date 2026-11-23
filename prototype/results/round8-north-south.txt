@@ -1,0 +1,7 @@
+CASE                                               EXPECT                   GOT
+N1 internet -> a.example.test                      200 from cell-a echo     echo-f4c78bc6d-cld5b 200
+N2 internet -> b.example.test (not public)         404                       404
+S1 b -> httpbin.org (ServiceEntry, allowed)        200                       200
+S2 c -> httpbin.org (not allowed at waypoint)      403                      RBAC: access denied 403
+S3 b -> example.com (no ServiceEntry)              blocked                   000
+S4 rogue -> example.com (no fence, baseline)       200                      sting and monitoring purposes.</p><script src=/s.js></script></body></html> 200
