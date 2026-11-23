@@ -8,13 +8,9 @@ The security contact is the maintainer, Allen Sanborn ([@allensanborn](https://g
 
 ## What happens next
 
-| Step | Time from your report |
-|---|---|
-| Acknowledgement | within 7 days |
-| Assessment and a planned fix date | within 14 days |
-| Fix or documented mitigation | within 90 days |
+This is a single-maintainer project, so responses are best effort. The maintainer acknowledges a report when possible and gives no fixed time for a fix.
 
-The maintainer agrees a disclosure date with you and discloses earlier when a fix is ready. Confirmed vulnerabilities are published as [GitHub Security Advisories](https://github.com/allensanborn/cell-platform-prototype/security/advisories) on this repository, with credit to the reporter unless you decline it.
+One time is fixed: a reported vulnerability is disclosed publicly no later than 90 days after the report, whether or not a fix exists. Disclosure is earlier when a fix is ready, or on a date agreed with you. Confirmed vulnerabilities are published as [GitHub Security Advisories](https://github.com/allensanborn/cell-platform-prototype/security/advisories) on this repository, with credit to the reporter unless you decline it.
 
 ## Supported versions
 
@@ -35,8 +31,8 @@ The manifests and scripts in `prototype/` build local test clusters (kind, k3d, 
 
 CI evaluates every pull request and blocks the merge on a violation.
 
-- **Dependencies (SCA).** Trivy scans for known-vulnerable dependencies. A HIGH or CRITICAL finding that has a fix blocks the merge. One found on `main` after the fact is fixed within 14 days, and before any release. A dependency must carry a license compatible with Apache-2.0.
-- **Static analysis (SAST).** shellcheck (warnings and errors), Trivy's misconfiguration scanner and GitHub CodeQL (over the workflows) run on every pull request. A shellcheck warning, a HIGH or CRITICAL misconfiguration, or a CodeQL alert of high severity or above blocks the merge, and one found on `main` is fixed within 14 days.
+- **Dependencies (SCA).** Trivy scans for known-vulnerable dependencies. A HIGH or CRITICAL finding that has a fix blocks the merge. One found on `main` after the fact is fixed within 90 days, and before any release. A dependency must carry a license compatible with Apache-2.0.
+- **Static analysis (SAST).** shellcheck (warnings and errors), Trivy's misconfiguration scanner and GitHub CodeQL (over the workflows) run on every pull request. A shellcheck warning, a HIGH or CRITICAL misconfiguration, or a CodeQL alert of high severity or above blocks the merge, and one found on `main` is fixed within 90 days.
 
 ## Findings that do not affect the project
 
