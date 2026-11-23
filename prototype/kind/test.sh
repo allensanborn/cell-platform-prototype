@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cell prototype test matrix. Cells: a (allowFrom b), b (dependsOn a), c (dependsOn a, not allowed by a); rogue = non-mesh namespace.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 workload() { # $1 = namespace
   kubectl -n "$1" apply -f - <<EOF

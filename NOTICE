@@ -1,0 +1,13 @@
+Cell platform prototype
+Copyright 2026 Allen Sanborn
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party material
+--------------------
+
+The files under sources/raw/ are verbatim captures of third-party project
+documentation, kept so that every claim in docs/ can be checked against its
+source. They are not covered by the license above. Each capture remains under
+the license of the project it came from, and each file records its origin
+(repository, path, ref or URL) in its own header.
