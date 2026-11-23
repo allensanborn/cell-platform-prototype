@@ -16,38 +16,17 @@ A cell is one team's slice of the platform: its namespaces, its network fences, 
 
 On a platform shaped like the New York Times' DVSP, the contract with each service is one versioned Helm chart. A platform change reaches a running service only when that team merges a chart bump, so a platform-wide migration waits on every tenant. This repo asks which tool should own the cell so that the platform team can change all cells at once, in a staged order, and without a tenant being able to weaken its own fences.
 
+![System context: the platform team, tenant teams, and internet clients use the cell platform, which provisions into team AWS accounts and calls third-party APIs](docs/architecture/exports/structurizr-Context.svg)
+
 This is an outside assessment of NYT's published setup, not NYT's plan.
 
 ## How a cell change reaches every cluster
 
 The platform team edits one Composition in Git. Argo CD ships each `Cell` to every workload cluster, and the Crossplane on that cluster renders it. Dev cells take every new revision. Prod cells take only the revisions labelled `stable`.
 
-```mermaid
-flowchart TB
-  PT(["Platform team"])
-  EV(["Account-created event"])
-  subgraph hub["Hub cluster"]
-    GIT[("Git<br/>Cell XRs and Compositions")]
-    ARGO["Argo CD<br/>ApplicationSet"]
-    GIT --> ARGO
-  end
-  subgraph devc["Dev workload cluster"]
-    XD["Crossplane<br/>channel: dev"]
-    CD["Cells"]
-    XD -->|renders| CD
-  end
-  subgraph prodc["Prod workload cluster"]
-    XP["Crossplane<br/>channel: stable"]
-    CP["Cells"]
-    XP -->|renders| CP
-  end
-  AWS[("Team AWS accounts<br/>Postgres, DynamoDB")]
-  PT -->|"edits the template,<br/>labels a revision dev, then stable"| GIT
-  EV -->|"platform writes a Cell XR"| GIT
-  ARGO -->|"Cell XR"| XD
-  ARGO -->|"Cell XR"| XP
-  XP -->|"assumes one role<br/>per team account"| AWS
-```
+![Containers: the Argo CD hub reads Cell XRs from Git and applies them to Crossplane on each workload cluster, which renders each cell and its data stores](docs/architecture/exports/structurizr-Containers.svg)
+
+Both C4 diagrams on this page are generated from one model, [docs/architecture/workspace.dsl](docs/architecture/workspace.dsl).
 
 In the test, a Composition labelled `dev` moved only the dev cluster. Relabelled `stable`, it then moved prod. A deleted fence object was recreated by the local Crossplane in about 10 seconds.
 
