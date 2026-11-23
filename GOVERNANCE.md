@@ -12,7 +12,7 @@ No one else has write access.
 
 ## Roles
 
-- **Maintainer.** Reviews and merges pull requests, triages issues, answers security reports within the times in [SECURITY.md](SECURITY.md), and owns the repository settings.
+- **Maintainer.** Reviews and merges pull requests, triages issues, answers security reports as [SECURITY.md](SECURITY.md) describes, and owns the repository settings.
 - **Contributor.** Anyone who opens an issue or a pull request. Contributors work from forks and have no write access. [CONTRIBUTING.md](CONTRIBUTING.md) describes the process.
 
 ## Granting access

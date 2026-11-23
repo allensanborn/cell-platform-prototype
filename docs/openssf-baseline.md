@@ -10,7 +10,7 @@ The project has made no release, so every control that starts "when the project 
 
 | Control | Status | Evidence |
 |---|---|---|
-| AC-01.01 MFA for sensitive resources | Met | GitHub requires two-factor authentication on accounts that contribute code, and the maintainer's is the only account with write access ([GOVERNANCE.md](../GOVERNANCE.md)). |
+| AC-01.01 MFA for sensitive resources | Met | The maintainer's GitHub account uses two-factor authentication (confirmed by the maintainer on 2026-11-23), and it is the only account with write access ([GOVERNANCE.md](../GOVERNANCE.md)). |
 | AC-02.01 Least privilege for new collaborators | Met | GitHub assigns a collaborator's role by hand. [GOVERNANCE.md](../GOVERNANCE.md) sets the lowest role as the starting point. |
 | AC-03.01 No direct commits to the primary branch | Met | Repository ruleset `main`: changes need a pull request. No bypass actors. |
 | AC-03.02 Primary branch cannot be deleted | Met | Ruleset `main`: deletion and force-push are blocked. |
