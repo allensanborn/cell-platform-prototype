@@ -1,0 +1,6 @@
+{
+  "tier": 1,
+  "diagramDir": "docs/architecture",
+  "mcp": { "mode": "none" },
+  "reviewGrill": true
+}
