@@ -135,3 +135,7 @@ Round 6 uses only public, Apache-2.0 Terraform modules (Cloud Posse `terraform-a
 ## Limits
 
 Nothing here ran at production scale or against real AWS. Primary sources were captured 2026-11-13 to 2026-11-17, and each capture's header pins the versions. Claims that were not confirmed are marked **UNVERIFIED**, and inferences are labelled.
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) to propose a change and [SECURITY.md](SECURITY.md) to report a vulnerability. The project is licensed under [Apache-2.0](LICENSE). [docs/openssf-baseline.md](docs/openssf-baseline.md) records how it meets the OpenSSF Baseline.
